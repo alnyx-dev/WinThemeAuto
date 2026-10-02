@@ -33,6 +33,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - [🔒 Privacy](#-privacy)
 - [❓ FAQ](#-faq)
 - [🛠️ Troubleshooting](#️-troubleshooting)
+- [📜 Changelog](#-changelog)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
@@ -61,7 +62,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 
 Get them from the [latest release](https://github.com/alnyx-dev/WinThemeAuto/releases). No installer, no admin rights — each exe is a single portable file.
 
-**System requirements:** Windows 10 (1809+) or Windows 11. ~2 MB download, ~0% CPU when idle (wakes up once every 5 s).
+**System requirements:** Windows 10 (1809+) or Windows 11. ~12 MB download, ~0% CPU when idle (wakes up once every 5 s).
 
 ## 🚀 Quick start
 
@@ -120,6 +121,10 @@ WinThemeAuto-x64.exe [--tray]
 |---------|------------------------------------------|
 | `--tray`| Start hidden in the tray (used for autostart) |
 
+### Updates
+
+The footer shows the current version (`v0.1.1`) and a **Check for updates** button. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
+
 ## ⚙️ Settings reference
 
 | Setting | Description |
@@ -132,6 +137,7 @@ WinThemeAuto-x64.exe [--tray]
 | `Light/Dark offset (min)` | Shift relative to sunrise/sunset. Integer `-180…180`. Negative = earlier. |
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
+| `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
 The status line shows helpful hints (`Next: dark at 19:00 (in 7 h)`), and errors appear in red (bad time format, missing coordinates, save failures).
 
@@ -173,7 +179,8 @@ Notes:
 - **Scheduler:** every 5 s the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
 - **Sun mode:** offline solar calculation (mean anomaly → ecliptic longitude → transit → hour angle, `-0.833°` zenith correction) per date + longitude/latitude. Returns `Normal { rise, set }`, `PolarDay`, or `PolarNight`.
-- **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window that auto-shrinks when info lines appear/disappear. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
+- **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window sized to its content — it grows automatically when info lines appear. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
+- **Self-update:** compares `CARGO_PKG_VERSION` with the latest GitHub Release tag, downloads the arch-matching asset and hands over to a hidden updater script that waits for exit, swaps the exe and relaunches with the same args.
 - **Autostart:** standard `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry.
 
 ## 🆚 Comparison
@@ -182,7 +189,7 @@ Notes:
 |---|---|---|---|
 | Light/dark **theme** switching | ✅ | ✅ | ❌ (only color temperature) |
 | Sunrise/sunset mode | ✅ (offline calc) | ✅ | ✅ |
-| Portable single exe | ✅ (~2 MB) | ❌ (installer + service) | built-in |
+| Portable single exe | ✅ (~12 MB) | ❌ (installer + service) | built-in |
 | Open source | ✅ MIT | ✅ GPL | ❌ |
 | Memory footprint | ~10 MB, tray only | service + app | system |
 
@@ -199,6 +206,7 @@ Notes:
 - [x] Fixed-time and sunrise/sunset switching
 - [x] Tray icon + autostart
 - [x] x64 and x86 release builds via GitHub Actions
+- [x] Self-updates via GitHub Releases
 - [ ] Wallpaper switching alongside theme
 - [ ] Accent-color sync option
 - [ ] Hotkey for instant toggle
@@ -218,6 +226,7 @@ WinThemeAuto/
 │   ├── theme.rs     # Registry read/write + broadcast
 │   ├── geo.rs       # IP geolocation (ipwho.is)
 │   ├── tray.rs      # Tray icon + menu
+│   ├── update.rs    # Self-update: check, download, self-install
 │   └── autostart.rs # HKCU Run key management
 ├── ui/
 │   └── main.slint   # Slint UI definition
@@ -230,7 +239,9 @@ Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono`, `serde` / `serde_jso
 ## 🔒 Privacy
 
 - Coordinates and preferences stay local in your config file.
-- The **only** network request is made when you click **Detect via IP** (GET `https://ipwho.is/`).
+- Network is used only when **you** ask for it:
+  - **Detect via IP** → one GET to `https://ipwho.is/`
+  - **Check for updates** → GitHub Releases API + exe download from `github.com`
 - Sun-time computation itself is fully offline.
 
 ## ❓ FAQ
@@ -252,7 +263,7 @@ Yes, Windows 10 1809+ and Windows 11, both 64- and 32-bit builds.
 <details>
 <summary><b>Does it send anything to the internet?</b></summary>
 
-Only when you press **Detect via IP**. Everything else — including sunrise/sunset math — is offline.
+Only on your explicit action: **Detect via IP** queries `ipwho.is`, **Check for updates** queries the GitHub Releases API. Everything else — including sunrise/sunset math — is offline.
 
 </details>
 
@@ -289,6 +300,16 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `No switches: polar day/night` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
 
+## 📜 Changelog
+
+### v0.1.1
+- 🔄 Self-updates: **Check for updates** button with automatic download, install and restart
+- 🪟 Window sizing fixed: opens at full content size and grows with it (no more title-bar-only strip); wider default width (440px)
+- Shows current version in the window footer
+
+### v0.1.0
+- Initial release: fixed-time and sunrise/sunset switching, tray icon, autostart, IP geolocation, x64 + x86 portable builds
+
 ## 🤝 Contributing
 
 Issues and PRs are welcome:
@@ -299,7 +320,7 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
-Please keep PRs focused and add/adjust unit tests for `config`, `schedule`, `sun`, or `geo` logic when relevant.
+Please keep PRs focused and add/adjust unit tests for `config`, `schedule`, `sun`, `geo` or `update` logic when relevant.
 
 ## ⭐ Star history
 
