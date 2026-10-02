@@ -84,9 +84,14 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
     std::thread::spawn(|| {
         broadcast_change();
         refresh_taskbars();
+        // A second broadcast shortly after: some apps only pick up the
+        // change once their message queue has settled.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        broadcast_change();
     });
     Ok(())
 }
+
 
 fn broadcast_change() {
     let param: Vec<u16> = "ImmersiveColorSet\0".encode_utf16().collect();

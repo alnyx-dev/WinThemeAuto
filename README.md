@@ -52,6 +52,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
+- **Single instance** — a second launch just focuses the running window instead of duplicating tray icons
 
 ## 📥 Download
 
@@ -182,6 +183,7 @@ Notes:
 - **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window sized to its content — it grows automatically when info lines appear. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
 - **Self-update:** compares `CARGO_PKG_VERSION` with the latest GitHub Release tag, downloads the arch-matching asset and hands over to a hidden updater script that waits for exit, swaps the exe and relaunches with the same args.
 - **Autostart:** standard `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry.
+- **Single instance:** a named mutex guards the process; a second launch forwards focus to the running window and exits.
 
 ## 🆚 Comparison
 

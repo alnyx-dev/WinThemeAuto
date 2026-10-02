@@ -4,6 +4,7 @@ mod autostart;
 mod config;
 mod geo;
 mod schedule;
+mod single_instance;
 mod sun;
 mod theme;
 mod tray;
@@ -27,6 +28,14 @@ struct State {
 type Shared = Rc<RefCell<State>>;
 
 fn main() -> anyhow::Result<()> {
+    // Held for the whole process lifetime. `None` means either another
+    // instance is running or the mutex itself failed — step aside only
+    // when the running window is actually found.
+    let guard = single_instance::Guard::acquire().ok().flatten();
+    if guard.is_none() && single_instance::focus_existing() {
+        return Ok(());
+    }
+    let _guard = guard;
     if let Err(e) = run() {
         show_fatal(&format!("WinThemeAuto: {e:#}"));
         return Err(e);
