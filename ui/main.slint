@@ -1,0 +1,245 @@
+import { Switch, CheckBox, LineEdit, Button, ComboBox, VerticalBox, HorizontalBox, GroupBox } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "WinThemeAuto";
+    preferred-width: 360px;
+    preferred-height: 200px;
+    min-width: 300px;
+
+    in property <bool> is-dark;
+    in property <string> status;
+    in property <string> sun-info;
+    in property <string> next-switch;
+    in property <string> geo-hint;
+    in property <bool> locating;
+
+    in-out property <bool> auto-enabled;
+    in-out property <int> mode-index;
+    in-out property <string> light-at;
+    in-out property <string> dark-at;
+    in-out property <string> lat;
+    in-out property <string> lon;
+    in-out property <string> light-offset;
+    in-out property <string> dark-offset;
+    in-out property <bool> change-apps;
+    in-out property <bool> change-system;
+    in-out property <bool> autostart;
+    in-out property <bool> show-advanced;
+
+    callback toggle-theme();
+    callback settings-changed();
+    callback detect-location();
+    callback size-changed();
+
+    VerticalBox {
+        spacing: 8px;
+        alignment: start;
+
+        HorizontalBox {
+            padding: 0px;
+            Text {
+                text: "WinThemeAuto";
+                font-size: 20px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                y: 7px;
+                background: root.is-dark ? #1a1a1a : #f5c518;
+                border-width: 1px;
+                border-color: #88888888;
+            }
+        }
+
+        HorizontalBox {
+            padding: 0px;
+            spacing: 8px;
+            Text {
+                text: root.is-dark ? "Dark now" : "Light now";
+                font-size: 13px;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+            Button {
+                text: root.is-dark ? "Switch to light" : "Switch to dark";
+                clicked => { root.toggle-theme(); }
+            }
+        }
+
+        if root.next-switch != "" : Text {
+            text: root.next-switch;
+            color: #2e7d32;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+
+        Rectangle { height: 1px; background: #88888844; }
+
+        GroupBox {
+            title: "Auto switch";
+            VerticalBox {
+                padding: 0px;
+                spacing: 6px;
+                Switch {
+                    text: "Enabled (close minimizes to tray)";
+                    checked <=> root.auto-enabled;
+                    toggled => { root.settings-changed(); }
+                }
+                ComboBox {
+                    model: ["By time", "Sunrise and sunset"];
+                    current-index <=> root.mode-index;
+                    selected => { root.settings-changed(); }
+                }
+
+                if root.mode-index == 0 : VerticalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    HorizontalBox {
+                        padding: 0px;
+                        Text { text: "Light from"; vertical-alignment: center; horizontal-stretch: 1; }
+                        LineEdit {
+                            text <=> root.light-at;
+                            placeholder-text: "07:00";
+                            width: 90px;
+                            accepted => { root.settings-changed(); }
+                        }
+                    }
+                    HorizontalBox {
+                        padding: 0px;
+                        Text { text: "Dark from"; vertical-alignment: center; horizontal-stretch: 1; }
+                        LineEdit {
+                            text <=> root.dark-at;
+                            placeholder-text: "19:00";
+                            width: 90px;
+                            accepted => { root.settings-changed(); }
+                        }
+                    }
+                }
+
+                if root.mode-index == 1 : VerticalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 4px;
+                        Text { text: "Lat."; vertical-alignment: center; }
+                        LineEdit {
+                            text <=> root.lat;
+                            placeholder-text: "55.75";
+                            horizontal-stretch: 1;
+                            accepted => { root.settings-changed(); }
+                        }
+                        Text { text: "Lon."; vertical-alignment: center; }
+                        LineEdit {
+                            text <=> root.lon;
+                            placeholder-text: "37.61";
+                            horizontal-stretch: 1;
+                            accepted => { root.settings-changed(); }
+                        }
+                    }
+                    Button {
+                        text: root.locating ? "Locating…" : "Detect via IP";
+                        enabled: !root.locating;
+                        clicked => { root.detect-location(); }
+                    }
+                    if root.geo-hint != "" : Text {
+                        text: root.geo-hint;
+                        color: #888888;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    if root.sun-info != "" : Text {
+                        text: root.sun-info;
+                        color: #888888;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Button {
+                        text: root.show-advanced ? "Hide offsets" : "Sunrise/sunset offsets…";
+                        clicked => {
+                            root.show-advanced = !root.show-advanced;
+                            root.size-changed();
+                        }
+                    }
+                    if root.show-advanced : VerticalBox {
+                        padding: 0px;
+                        spacing: 6px;
+                        HorizontalBox {
+                            padding: 0px;
+                            spacing: 4px;
+                            Text { text: "Light offset from sunrise (min)"; vertical-alignment: center; horizontal-stretch: 1; }
+                            LineEdit {
+                                text <=> root.light-offset;
+                                placeholder-text: "0";
+                                width: 70px;
+                                accepted => { root.settings-changed(); }
+                            }
+                        }
+                        HorizontalBox {
+                            padding: 0px;
+                            spacing: 4px;
+                            Text { text: "Dark offset from sunset (min)"; vertical-alignment: center; horizontal-stretch: 1; }
+                            LineEdit {
+                                text <=> root.dark-offset;
+                                placeholder-text: "0";
+                                width: 70px;
+                                accepted => { root.settings-changed(); }
+                            }
+                        }
+                        Text {
+                            text: "Negative means earlier (\"-30\" = 30 min before the event).";
+                            color: #888888;
+                            font-size: 12px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        GroupBox {
+            title: "Apply theme to";
+            HorizontalBox {
+                padding: 0px;
+                spacing: 12px;
+                CheckBox {
+                    text: "Apps";
+                    checked <=> root.change-apps;
+                    toggled => { root.settings-changed(); }
+                }
+                CheckBox {
+                    text: "System";
+                    checked <=> root.change-system;
+                    toggled => { root.settings-changed(); }
+                }
+            }
+        }
+
+        HorizontalBox {
+            padding: 0px;
+            spacing: 8px;
+            CheckBox {
+                text: "Start with Windows";
+                horizontal-stretch: 1;
+                checked <=> root.autostart;
+                toggled => { root.settings-changed(); }
+            }
+            Button {
+                text: "Apply";
+                primary: true;
+                clicked => { root.settings-changed(); }
+            }
+        }
+
+        if root.status != "" : Text {
+            text: root.status;
+            color: #e5484d;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+}

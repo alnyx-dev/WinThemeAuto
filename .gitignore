@@ -1,0 +1,23 @@
+# Rust build output
+/target/
+dist/
+
+# Cargo
+**/*.rs.bk
+.cargo/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Windows junk
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local env
+.env

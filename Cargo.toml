@@ -1,0 +1,27 @@
+[package]
+name = "win-theme-auto"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+slint = { version = "1", features = ["raw-window-handle-06"] }
+winreg = "0.55"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+tray-icon = "0.21"
+anyhow = "1"
+ureq = "2"
+raw-window-handle = "0.6"
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi"] }
+
+[build-dependencies]
+slint-build = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
