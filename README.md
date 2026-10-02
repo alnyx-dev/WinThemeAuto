@@ -50,6 +50,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Start with Windows** — registry `Run` key autostart (starts hidden with `--tray`)
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
+- 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
 
 ## 📥 Download
 
@@ -259,6 +260,13 @@ Only when you press **Detect via IP**. Everything else — including sunrise/sun
 <summary><b>Why two exe files?</b></summary>
 
 Native code can't be universal: `x64` is for 64-bit Windows (most PCs), `x86` for 32-bit ones (it also runs on 64-bit via compatibility mode).
+
+</details>
+
+<details>
+<summary><b>How does self-update work?</b></summary>
+
+The **Check for updates** button compares your version with the latest GitHub Release, downloads the matching exe, then a hidden updater script waits for the app to exit, swaps the file and restarts it (keeping your args like `--tray`). Settings in `%APPDATA%` are untouched.
 
 </details>
 

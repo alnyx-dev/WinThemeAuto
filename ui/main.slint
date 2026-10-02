@@ -25,11 +25,14 @@ export component MainWindow inherits Window {
     in-out property <bool> change-system;
     in-out property <bool> autostart;
     in-out property <bool> show-advanced;
+    in property <string> app-version;
+    in property <string> update-info;
+    in property <bool> checking-update;
 
     callback toggle-theme();
     callback settings-changed();
     callback detect-location();
-    callback size-changed();
+    callback check-updates();
 
     VerticalBox {
         spacing: 8px;
@@ -162,7 +165,6 @@ export component MainWindow inherits Window {
                         text: root.show-advanced ? "Hide offsets" : "Sunrise/sunset offsets…";
                         clicked => {
                             root.show-advanced = !root.show-advanced;
-                            root.size-changed();
                         }
                     }
                     if root.show-advanced : VerticalBox {
@@ -233,6 +235,30 @@ export component MainWindow inherits Window {
                 primary: true;
                 clicked => { root.settings-changed(); }
             }
+        }
+
+        HorizontalBox {
+            padding: 0px;
+            spacing: 8px;
+            Text {
+                text: "v" + root.app-version;
+                color: #888888;
+                font-size: 12px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Button {
+                text: root.checking-update ? "Checking…" : "Check for updates";
+                enabled: !root.checking-update;
+                clicked => { root.check-updates(); }
+            }
+        }
+
+        if root.update-info != "" : Text {
+            text: root.update-info;
+            color: #888888;
+            font-size: 12px;
+            wrap: word-wrap;
         }
 
         if root.status != "" : Text {

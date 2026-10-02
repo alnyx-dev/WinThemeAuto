@@ -7,6 +7,7 @@ mod schedule;
 mod sun;
 mod theme;
 mod tray;
+mod update;
 
 use chrono::{Local, NaiveTime};
 use config::{Config, Mode};
@@ -86,9 +87,9 @@ fn run() -> anyhow::Result<()> {
     }
     {
         let w = ui.as_weak();
-        ui.on_size_changed(move || {
+        ui.on_check_updates(move || {
             if let Some(ui) = w.upgrade() {
-                fit_height(&ui);
+                check_updates(&ui);
             }
         });
     }
@@ -197,6 +198,7 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config) {
     ui.set_change_apps(cfg.change_apps);
     ui.set_change_system(cfg.change_system);
     ui.set_autostart(autostart::is_enabled());
+    ui.set_app_version(update::current_version().into());
 }
 
 fn tick(ui: &MainWindow, state: &Shared) {
@@ -308,6 +310,65 @@ fn detect_location(ui: &MainWindow) {
                 }
             }
         });
+    });
+}
+
+fn check_updates(ui: &MainWindow) {
+    if ui.get_checking_update() {
+        return;
+    }
+    ui.set_checking_update(true);
+    ui.set_update_info("Checking for updates…".into());
+
+    let weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let info = update::check();
+        let set = |text: &str, done: bool| {
+            let text = text.to_string();
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                ui.set_update_info(text.into());
+                if done {
+                    ui.set_checking_update(false);
+                }
+            });
+        };
+
+        let info = match info {
+            Ok(i) => i,
+            Err(e) => {
+                set(&format!("Update check failed: {e}"), true);
+                return;
+            }
+        };
+        if !info.is_newer {
+            set(
+                &format!("You have the latest version (v{}).", info.latest),
+                true,
+            );
+            return;
+        }
+
+        set(&format!("Found v{} — downloading…", info.latest), false);
+        let new_exe = match update::download(&info.download_url) {
+            Ok(p) => p,
+            Err(e) => {
+                set(&format!("Download failed: {e}"), true);
+                return;
+            }
+        };
+
+        set(
+            &format!("Installing v{} — the app will restart…", info.latest),
+            false,
+        );
+        match update::self_install(&new_exe) {
+            Ok(()) => {
+                let _ = weak.upgrade_in_event_loop(|_| {
+                    let _ = slint::quit_event_loop();
+                });
+            }
+            Err(e) => set(&format!("Install failed: {e}"), true),
+        }
     });
 }
 
