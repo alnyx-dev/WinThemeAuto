@@ -99,7 +99,8 @@ cargo test
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect via IP**, then optionally set offsets.
 4. Under **Apply theme to**, check **Apps** and/or **System**.
-5. Click **Apply**. Settings save automatically and take effect within ~5 seconds.
+5. (Optional) under **Windows themes**, pick a full `.theme` for light and dark — the wallpaper will follow each switch.
+6. Click **Apply**. Settings save automatically and take effect within ~5 seconds.
 
 Closing the window hides it to the tray — use the tray menu or double-click the icon to bring it back.
 
@@ -125,7 +126,7 @@ WinThemeAuto-x64.exe [--tray]
 
 ### Updates
 
-The footer shows the current version (`v0.1.1`) and a **Check for updates** button. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
+The footer shows the current version (e.g. v0.2.0) and a **Check for updates** button. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
 
 ## ⚙️ Settings reference
 
@@ -206,6 +207,8 @@ Notes:
 - **Taskbar stuck?** The app already refreshes `Shell_TrayWnd` on every switch — if your taskbar still lags, it's a Windows quirk, not the app.
 - **Multiple PCs:** copy `%APPDATA%\WinThemeAuto\config.json` between machines to clone your setup.
 - **Manual mode:** disable **Auto switch** and uncheck autostart — the app becomes a pure tray toggle for themes.
+- **Wallpaper that follows:** pick light/dark themes whose wallpapers you like — e.g. a bright photo theme for day, a dark abstract one for night.
+- **Second launch?** It just focuses the already-running window — you'll never get duplicate tray icons.
 
 ## 🗺️ Roadmap
 
@@ -213,7 +216,8 @@ Notes:
 - [x] Tray icon + autostart
 - [x] x64 and x86 release builds via GitHub Actions
 - [x] Self-updates via GitHub Releases
-- [ ] Wallpaper switching alongside theme
+- [x] Wallpaper follows the theme (via `.theme` wallpapers)
+- [ ] Custom wallpaper paths (independent of themes)
 - [ ] Accent-color sync option
 - [ ] Hotkey for instant toggle
 - [ ] Screen brightness follow (laptops)
@@ -286,6 +290,13 @@ Native code can't be universal: `x64` is for 64-bit Windows (most PCs), `x86` fo
 <summary><b>How does self-update work?</b></summary>
 
 The **Check for updates** button compares your version with the latest GitHub Release, downloads the matching exe, then a hidden updater script waits for the app to exit, swaps the file and restarts it (keeping your args like `--tray`). Settings in `%APPDATA%` are untouched.
+
+</details>
+
+<details>
+<summary><b>Running the exe does nothing / no second window?</b></summary>
+
+That's the single-instance guard: if the app is already running (look for the tray icon), a second launch just brings its window forward instead of starting a copy.
 
 </details>
 
