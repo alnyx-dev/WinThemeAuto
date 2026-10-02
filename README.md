@@ -310,6 +310,11 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 📜 Changelog
 
+### v0.2.0
+- 🖼️ Full Windows themes: pick light/dark `.theme` from installed ones, wallpaper follows silently
+- 🛡️ Single-instance guard: second launch focuses the running window
+- 📢 Double theme-change broadcast for slow apps
+
 ### v0.1.1
 - 🔄 Self-updates: **Check for updates** button with automatic download, install and restart
 - 🪟 Window sizing fixed: opens at full content size and grows with it (no more title-bar-only strip); wider default width (440px)
