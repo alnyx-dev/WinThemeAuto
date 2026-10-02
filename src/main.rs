@@ -143,18 +143,6 @@ fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn fit_height(ui: &MainWindow) {
-    let weak = ui.as_weak();
-    slint::Timer::single_shot(Duration::from_millis(100), move || {
-        if let Some(ui) = weak.upgrade() {
-            let s = ui.window().size();
-            ui.window().set_size(slint::WindowSize::Physical(slint::PhysicalSize::new(
-                s.width, 1,
-            )));
-        }
-    });
-}
-
 fn show_window(ui: &MainWindow, state: &Shared) {
     let _ = ui.show();
     force_light_titlebar(ui);
@@ -203,7 +191,6 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config) {
 
 fn tick(ui: &MainWindow, state: &Shared) {
     let (apps_theme, sys_theme) = theme::current_pair();
-    let mut shrink = false;
     {
         let mut st = state.borrow_mut();
         let now = Local::now();
@@ -232,11 +219,6 @@ fn tick(ui: &MainWindow, state: &Shared) {
             String::new()
         };
         let next = schedule::next_switch_info(&st.cfg, now);
-        if (ui.get_sun_info().as_str().is_empty() != info.is_empty())
-            || (ui.get_next_switch().as_str().is_empty() != next.is_empty())
-        {
-            shrink = true;
-        }
         ui.set_sun_info(info.into());
         ui.set_next_switch(next.into());
 
@@ -248,9 +230,6 @@ fn tick(ui: &MainWindow, state: &Shared) {
         let shown =
             theme::display_theme(apps_theme, sys_theme, st.cfg.change_apps, st.cfg.change_system);
         ui.set_is_dark(shown == Theme::Dark);
-    }
-    if shrink {
-        fit_height(ui);
     }
 }
 
@@ -417,7 +396,6 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
         }
     }
 
-    let mode_changed = state.borrow().cfg.mode != mode;
     let new_cfg = {
         let st = state.borrow();
         let (old_lat, old_lon) = (st.cfg.lat, st.cfg.lon);
@@ -450,10 +428,6 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
         return;
     }
 
-    let had_status = !ui.get_status().is_empty();
     ui.set_status("".into());
     tick(ui, state);
-    if mode_changed || had_status {
-        fit_height(ui);
-    }
 }
