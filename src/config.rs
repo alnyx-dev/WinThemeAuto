@@ -23,6 +23,10 @@ pub struct Config {
     pub dark_offset_min: i32,
     pub change_apps: bool,
     pub change_system: bool,
+    /// Full `.theme` file applied on light switch ("" = flags only).
+    pub light_theme: String,
+    /// Full `.theme` file applied on dark switch ("" = flags only).
+    pub dark_theme: String,
 }
 
 impl Default for Config {
@@ -38,6 +42,8 @@ impl Default for Config {
             dark_offset_min: 0,
             change_apps: true,
             change_system: true,
+            light_theme: String::new(),
+            dark_theme: String::new(),
         }
     }
 }
@@ -113,6 +119,12 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     }
     if let Some(b) = v.get("change_system").and_then(|x| x.as_bool()) {
         cfg.change_system = b;
+    }
+    if let Some(s) = v.get("light_theme").and_then(|x| x.as_str()) {
+        cfg.light_theme = s.to_string();
+    }
+    if let Some(s) = v.get("dark_theme").and_then(|x| x.as_str()) {
+        cfg.dark_theme = s.to_string();
     }
     sanitize(&mut cfg);
     cfg

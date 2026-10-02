@@ -7,13 +7,14 @@ mod schedule;
 mod single_instance;
 mod sun;
 mod theme;
+mod themes;
 mod tray;
 mod update;
 
 use chrono::{Local, NaiveTime};
 use config::{Config, Mode};
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
 use theme::Theme;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
@@ -21,8 +22,10 @@ slint::include_modules!();
 
 struct State {
     cfg: Config,
+    themes: Vec<themes::ThemeEntry>,
     last_scheduled: Option<Theme>,
     last_titlebar_sys: Option<Theme>,
+    last_wallpaper: Option<PathBuf>,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -60,12 +63,14 @@ fn run() -> anyhow::Result<()> {
     let start_hidden = std::env::args().any(|a| a == "--tray");
     let state: Shared = Rc::new(RefCell::new(State {
         cfg: Config::load(),
+        themes: themes::enumerate(),
         last_scheduled: None,
         last_titlebar_sys: None,
+        last_wallpaper: None,
     }));
 
     let ui = MainWindow::new()?;
-    load_into_ui(&ui, &state.borrow().cfg);
+    load_into_ui(&ui, &state.borrow().cfg, &state.borrow().themes);
     tick(&ui, &state);
 
     ui.window().on_close_requested(|| CloseRequestResponse::HideWindow);
@@ -181,7 +186,7 @@ fn force_light_titlebar(ui: &MainWindow) {
     }
 }
 
-fn load_into_ui(ui: &MainWindow, cfg: &Config) {
+fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::ThemeEntry]) {
     ui.set_auto_enabled(cfg.auto_enabled);
     ui.set_mode_index(if cfg.mode == Mode::Sun { 1 } else { 0 });
     ui.set_light_at(cfg.light_at.format("%H:%M").to_string().into());
@@ -196,6 +201,37 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config) {
     ui.set_change_system(cfg.change_system);
     ui.set_autostart(autostart::is_enabled());
     ui.set_app_version(update::current_version().into());
+
+    let names: Vec<SharedString> = std::iter::once("(System default)".into())
+        .chain(themes.iter().map(|t| themes::display_name(t).into()))
+        .collect();
+    ui.set_light_themes(ModelRc::new(VecModel::from(names.clone())));
+    ui.set_dark_themes(ModelRc::new(VecModel::from(names)));
+    ui.set_light_theme_index(theme_index(themes, &cfg.light_theme));
+    ui.set_dark_theme_index(theme_index(themes, &cfg.dark_theme));
+}
+
+/// ComboBox index for a stored theme path (0 = flags only).
+fn theme_index(themes: &[themes::ThemeEntry], path: &str) -> i32 {
+    if path.is_empty() {
+        return 0;
+    }
+    themes
+        .iter()
+        .position(|t| t.path.to_string_lossy() == path)
+        .map(|i| i as i32 + 1)
+        .unwrap_or(0)
+}
+
+/// Theme path for a ComboBox index ("" = flags only).
+fn theme_path(themes: &[themes::ThemeEntry], index: i32) -> String {
+    if index <= 0 {
+        return String::new();
+    }
+    themes
+        .get(index as usize - 1)
+        .map(|t| t.path.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn tick(ui: &MainWindow, state: &Shared) {
@@ -220,6 +256,7 @@ fn tick(ui: &MainWindow, state: &Shared) {
                     st.last_scheduled = Some(want);
                 }
             }
+            apply_wallpaper(ui, &mut st, want);
         }
 
         let info = if st.cfg.mode == Mode::Sun {
@@ -242,6 +279,37 @@ fn tick(ui: &MainWindow, state: &Shared) {
     }
 }
 
+/// Swap the wallpaper to the one from the full theme configured for
+/// `want`, if any. Silent when unconfigured or already applied.
+fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
+    let configured = if want == Theme::Light {
+        st.cfg.light_theme.clone()
+    } else {
+        st.cfg.dark_theme.clone()
+    };
+    if configured.is_empty() {
+        return;
+    }
+    let wallpaper = st
+        .themes
+        .iter()
+        .find(|t| t.path.to_string_lossy() == configured)
+        .and_then(|t| t.wallpaper.clone());
+    let Some(path) = wallpaper else {
+        return;
+    };
+    if st.last_wallpaper.as_ref() == Some(&path) {
+        return;
+    }
+    if !path.exists() {
+        return;
+    }
+    match theme::set_wallpaper(&path) {
+        Ok(()) => st.last_wallpaper = Some(path),
+        Err(e) => ui.set_status(format!("Wallpaper: {e}").into()),
+    }
+}
+
 fn toggle(ui: &MainWindow, state: &Shared) {
     let (apps, system) = {
         let st = state.borrow();
@@ -256,6 +324,7 @@ fn toggle(ui: &MainWindow, state: &Shared) {
         Ok(()) => {
             ui.set_status("".into());
             ui.set_is_dark(new == Theme::Dark);
+            apply_wallpaper(ui, &mut state.borrow_mut(), new);
         }
         Err(e) => {
             ui.set_status(format!("Error: {e}").into());
@@ -390,6 +459,13 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
     };
 
     let mode = if ui.get_mode_index() == 1 { Mode::Sun } else { Mode::Fixed };
+    let (light_theme, dark_theme) = {
+        let st = state.borrow();
+        (
+            theme_path(&st.themes, ui.get_light_theme_index()),
+            theme_path(&st.themes, ui.get_dark_theme_index()),
+        )
+    };
     let lat = parse_f(ui.get_lat()).filter(|v| (-90.0..=90.0).contains(v));
     let lon = parse_f(ui.get_lon()).filter(|v| (-180.0..=180.0).contains(v));
 
@@ -419,6 +495,8 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
             dark_offset_min,
             change_apps: ui.get_change_apps(),
             change_system: ui.get_change_system(),
+            light_theme,
+            dark_theme,
         }
     };
     if let Err(e) = new_cfg.save() {

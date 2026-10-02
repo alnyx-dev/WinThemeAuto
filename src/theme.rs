@@ -1,9 +1,12 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
+use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
 use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    FindWindowExW, PostMessageW, SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG,
-    WM_SETTINGCHANGE, WM_THEMECHANGED,
+    FindWindowExW, PostMessageW, SendMessageTimeoutW, SystemParametersInfoW, HWND_BROADCAST,
+    SMTO_ABORTIFHUNG, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETDESKWALLPAPER, WM_SETTINGCHANGE,
+    WM_THEMECHANGED,
 };
 use windows_sys::w;
 use winreg::{enums::*, RegKey};
@@ -92,6 +95,26 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
     Ok(())
 }
 
+/// Point the desktop wallpaper at `path` (used for full-theme switching).
+pub fn set_wallpaper(path: &Path) -> Result<()> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let ok = unsafe {
+        SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER,
+            0,
+            wide.as_ptr() as *const _ as *mut _,
+            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+        )
+    };
+    if ok == 0 {
+        bail!("SystemParametersInfoW failed for {}", path.display());
+    }
+    Ok(())
+}
 
 fn broadcast_change() {
     let param: Vec<u16> = "ImmersiveColorSet\0".encode_utf16().collect();

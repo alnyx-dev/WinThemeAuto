@@ -51,6 +51,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Start with Windows** — registry `Run` key autostart (starts hidden with `--tray`)
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
+- 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
 - **Single instance** — a second launch just focuses the running window instead of duplicating tray icons
 
@@ -137,6 +138,7 @@ The footer shows the current version (`v0.1.1`) and a **Check for updates** butt
 | `Detect via IP` | Fills in coordinates from your public IP (online, one-shot). You still need to press **Apply**. |
 | `Light/Dark offset (min)` | Shift relative to sunrise/sunset. Integer `-180…180`. Negative = earlier. |
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
+| `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
 | `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
@@ -176,7 +178,8 @@ Notes:
 ## 🧠 How it works
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
-- **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
+- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). On a switch the matching wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
+- **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
 - **Scheduler:** every 5 s the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
 - **Sun mode:** offline solar calculation (mean anomaly → ecliptic longitude → transit → hour angle, `-0.833°` zenith correction) per date + longitude/latitude. Returns `Normal { rise, set }`, `PolarDay`, or `PolarNight`.
@@ -190,6 +193,7 @@ Notes:
 |  | **WinThemeAuto** | Auto Dark Mode | Windows Night light |
 |---|---|---|---|
 | Light/dark **theme** switching | ✅ | ✅ | ❌ (only color temperature) |
+| Full theme + wallpaper | ✅ (optional, silent) | ✅ (via shell) | ❌ |
 | Sunrise/sunset mode | ✅ (offline calc) | ✅ | ✅ |
 | Portable single exe | ✅ (~12 MB) | ❌ (installer + service) | built-in |
 | Open source | ✅ MIT | ✅ GPL | ❌ |
@@ -228,6 +232,8 @@ WinThemeAuto/
 │   ├── theme.rs     # Registry read/write + broadcast
 │   ├── geo.rs       # IP geolocation (ipwho.is)
 │   ├── tray.rs      # Tray icon + menu
+│   ├── themes.rs    # Installed .theme enumeration + parsing
+│   ├── single_instance.rs # Named-mutex guard + focus running window
 │   ├── update.rs    # Self-update: check, download, self-install
 │   └── autostart.rs # HKCU Run key management
 ├── ui/

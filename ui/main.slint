@@ -27,6 +27,10 @@ export component MainWindow inherits Window {
     in property <string> app-version;
     in property <string> update-info;
     in property <bool> checking-update;
+    in property <[string]> light-themes;
+    in-out property <int> light-theme-index;
+    in property <[string]> dark-themes;
+    in-out property <int> dark-theme-index;
 
     callback toggle-theme();
     callback settings-changed();
@@ -216,6 +220,32 @@ export component MainWindow inherits Window {
                     text: "System";
                     checked <=> root.change-system;
                     toggled => { root.settings-changed(); }
+                }
+            }
+        }
+
+        GroupBox {
+            title: "Windows themes (wallpaper)";
+            VerticalBox {
+                padding: 0px;
+                spacing: 6px;
+                Text { text: "Light theme"; vertical-alignment: center; }
+                ComboBox {
+                    model: root.light-themes;
+                    current-index <=> root.light-theme-index;
+                    selected => { root.settings-changed(); }
+                }
+                Text { text: "Dark theme"; vertical-alignment: center; }
+                ComboBox {
+                    model: root.dark-themes;
+                    current-index <=> root.dark-theme-index;
+                    selected => { root.settings-changed(); }
+                }
+                Text {
+                    text: "\"System default\" switches flags only and leaves the wallpaper alone.";
+                    color: #888888;
+                    font-size: 12px;
+                    wrap: word-wrap;
                 }
             }
         }
