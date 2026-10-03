@@ -31,7 +31,6 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - [🧠 How it works](#-how-it-works)
 - [🆚 Comparison](#-comparison)
 - [💡 Tips & tricks](#-tips--tricks)
-- [🗺️ Roadmap](#️-roadmap)
 - [🧩 Project structure](#-project-structure)
 - [🔒 Privacy](#-privacy)
 - [❓ FAQ](#-faq)
@@ -97,14 +96,15 @@ cargo test
 
 ## 🖥️ Usage
 
-1. Open the app — the header shows the current effective theme (`Light now` / `Dark now`) with a quick **Switch** button.
-2. Under **Auto switch**, toggle **Enabled** (closing the window minimizes to tray while enabled).
+1. Open the app — the header shows the current theme (`Light now` / `Dark now`), the next switch preview, and a quick **Switch** button. Below it, tabs switch between **Auto switch**, **Appearance** and **Settings** (the status line + **Apply** footer stays put).
+2. On the **Auto switch** tab, toggle **Enabled** (closing the window minimizes to tray while enabled).
 3. Choose a mode:
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
-   - **Sunrise and sunset**: enter latitude/longitude, or click **Detect via IP**, then optionally set offsets.
-4. Under **Apply theme to**, check **Apps** and/or **System**.
-5. (Optional) under **Windows themes**, pick a full `.theme` for light and dark — the wallpaper will follow each switch. Or set a **custom wallpaper path** per mode (via the `…` picker) — it wins over the theme wallpaper.
-6. Click **Apply**. Settings save automatically and take effect within ~5 seconds.
+   - **Sunrise and sunset**: enter latitude/longitude, or click **Detect**, then set offsets in minutes.
+4. Still on the tab, pick **Apply to**: **Apps** and/or **System**.
+5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (via the `…` picker, wins over theme wallpaper). Enable **Sync accent color** and click a swatch (or type hex) per mode.
+6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**.
+7. Click **Apply** (always visible at the bottom). Settings save and take effect within ~5 seconds.
 
 Closing the window hides it to the tray — use the tray menu or double-click the icon to bring it back.
 
@@ -130,7 +130,7 @@ WinThemeAuto-x64.exe [--tray]
 
 ### Updates
 
-The footer shows the current version (e.g. v0.2.0) and a **Check for updates** button. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
+The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for updates** button — the result replaces the version text and glows green when you're up to date. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
 
 ## ⚙️ Settings reference
 
@@ -140,17 +140,17 @@ The footer shows the current version (e.g. v0.2.0) and a **Check for updates** b
 | `By time / Sunrise and sunset` | Switching mode. |
 | `Light from` / `Dark from` | Fixed-mode boundaries (`HH:MM`). May cross midnight. Must differ. |
 | `Lat.` / `Lon.` | Coordinates for sun mode. Valid ranges: lat `-90…90`, lon `-180…180`. |
-| `Detect via IP` | Fills in coordinates from your public IP (online, one-shot). You still need to press **Apply**. |
+| `Detect` | Fills in coordinates from your public IP (online, one-shot). You still need to press **Apply**. |
 | `Light/Dark offset (min)` | Shift relative to sunrise/sunset. Integer `-180…180`. Negative = earlier. |
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
 | `Light/Dark wallpaper` | Custom image path (`jpg/png/bmp`) per mode — wins over the theme wallpaper. `…` opens a file picker. Empty = theme only. |
-| `Sync accent color` | Applies the per-mode accent (`Light/Dark accent`, hex `RRGGBB`) on every switch. |
+| `Sync accent color` | Applies the per-mode accent on every switch — click a swatch to fill + apply instantly, or type hex. |
 | `Light/Dark accent` | Windows accent color per mode, e.g. `0078D4`. Needs **Show accent color on Start and taskbar** enabled for the taskbar to follow. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
 | `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
-The status line shows helpful hints (`Next: dark at 19:00 (in 7 h)`), and errors appear in red (bad time format, missing coordinates, save failures).
+The header subtitle previews the next switch (`Dark now • Next: dark at 19:00 (in 7 h)`); errors appear in red in the footer status line (bad time format, missing coordinates, save failures).
 
 ## 📁 Configuration file
 
@@ -222,20 +222,6 @@ Notes:
 - **Manual mode:** disable **Auto switch** and uncheck autostart — the app becomes a pure tray toggle for themes.
 - **Wallpaper that follows:** pick light/dark themes whose wallpapers you like — e.g. a bright photo theme for day, a dark abstract one for night. Or skip themes entirely and set two custom image paths.
 - **Second launch?** It just focuses the already-running window — you'll never get duplicate tray icons.
-
-## 🗺️ Roadmap
-
-- [x] Fixed-time and sunrise/sunset switching
-- [x] Tray icon + autostart
-- [x] x64 and x86 release builds via GitHub Actions
-- [x] Self-updates via GitHub Releases
-- [x] Wallpaper follows the theme (via `.theme` wallpapers)
-- [x] Custom wallpaper paths (independent of themes)
-- [x] Accent-color sync option
-- [ ] Hotkey for instant toggle
-- [ ] Screen brightness follow (laptops)
-
-Have an idea? [Open an issue](https://github.com/alnyx-dev/WinThemeAuto/issues) — feature requests are welcome.
 
 ## 🧩 Project structure
 
@@ -366,7 +352,7 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome:
+Issues and PRs are welcome — have an idea? [Open an issue](https://github.com/alnyx-dev/WinThemeAuto/issues).
 
 ```powershell
 cargo fmt --check
