@@ -16,6 +16,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Slint](https://img.shields.io/badge/UI-Slint-blue?style=flat-square)](https://slint.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Website](https://img.shields.io/badge/website-online-brightgreen?style=flat-square)](https://alnyx-dev.github.io/WinThemeAuto)
 
 </div>
 

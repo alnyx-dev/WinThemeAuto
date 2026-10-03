@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WinThemeAuto — Windows themes on autopilot</title>
+<meta name="description" content="Automatically switch Windows between light and dark themes — by schedule or by sunrise and sunset. Tiny portable tray app.">
+<meta property="og:title" content="WinThemeAuto — Windows themes on autopilot">
+<meta property="og:description" content="Light and dark Windows themes on a schedule or by sunrise and sunset. One portable .exe.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f12" media="(prefers-color-scheme: dark)">
+<script>
+// No-flash theme boot: saved choice, else the OS theme.
+(function () {
+  try {
+    var c = localStorage.getItem("wta-site-theme");
+    if (c !== "system" && c !== "light" && c !== "dark") c = "system";
+    var t = c === "system"
+      ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : c;
+    document.documentElement.dataset.theme = t;
+    document.documentElement.style.colorScheme = t;
+  } catch (e) { /* defaults */ }
+})();
+</script>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafaf9;
+    --fg: #17181c;
+    --muted: #686f7a;
+    --card: #ffffff;
+    --border: #e8e5df;
+    --btn-bg: #17181c;
+    --btn-fg: #fafaf9;
+    --accent: #b45309;
+    --shine: rgba(255, 255, 255, 0.4);
+    --glow-1: rgba(245, 179, 94, 0.35);
+    --glow-2: rgba(102, 85, 129, 0.22);
+    --shadow: 0 20px 50px -20px rgba(60, 45, 20, 0.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e0f12;
+      --fg: #f2f3f5;
+      --muted: #9aa1ac;
+      --card: #17191d;
+      --border: #24272e;
+      --btn-bg: #f2f3f5;
+      --btn-fg: #0e0f12;
+      --accent: #f0b35e;
+      --shine: rgba(0, 0, 0, 0.14);
+      --glow-1: rgba(245, 179, 94, 0.16);
+      --glow-2: rgba(102, 85, 129, 0.18);
+      --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0f12;
+    --fg: #f2f3f5;
+    --muted: #9aa1ac;
+    --card: #17191d;
+    --border: #24272e;
+    --btn-bg: #f2f3f5;
+    --btn-fg: #0e0f12;
+    --accent: #f0b35e;
+    --shine: rgba(0, 0, 0, 0.14);
+    --glow-1: rgba(245, 179, 94, 0.16);
+    --glow-2: rgba(102, 85, 129, 0.18);
+    --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* film grain to kill the digital flatness */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  }
+  .display { font-family: "Outfit", system-ui, sans-serif; }
+  .wrap { max-width: 1024px; margin: 0 auto; padding: 0 28px; }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+  .brand img { width: 30px; height: 30px; display: block; }
+  .nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+  .nav-right a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+  .nav-right a:hover { color: var(--fg); }
+  .nav-ver {
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 12px;
+    color: var(--muted);
+  }
+  .seg {
+    position: relative;
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg-pill {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 0;
+    width: 0;
+    border-radius: 999px;
+    background: var(--btn-bg);
+    opacity: 0;
+    transition: left 0.32s cubic-bezier(0.22, 1, 0.36, 1), width 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
+  }
+  .seg-pill.show { opacity: 1; }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 3px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button.on { color: var(--btn-fg); }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 40px;
+    align-items: center;
+    padding: 64px 0 88px;
+    position: relative;
+  }
+  .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 18px;
+  }
+  .eyebrow b { color: var(--accent); font-weight: 600; }
+  h1 {
+    font-size: clamp(40px, 5.4vw, 62px);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    font-weight: 700;
+    text-wrap: balance;
+    margin-bottom: 18px;
+  }
+  h1 .sun { color: var(--accent); }
+  .lede { color: var(--muted); font-size: 17px; max-width: 44ch; margin-bottom: 30px; }
+  .cta-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .btn {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    display: inline-block;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px 30px;
+    border-radius: 12px;
+    text-decoration: none;
+    box-shadow: var(--shadow);
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease;
+  }
+  .btn::after {
+    content: "";
+    position: absolute;
+    top: -30%;
+    bottom: -30%;
+    left: -70%;
+    width: 45%;
+    background: linear-gradient(105deg, transparent, var(--shine), transparent);
+    transform: skewX(-18deg);
+    animation: sweep 4.5s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0% { left: -70%; }
+    55%, 100% { left: 135%; }
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow), 0 8px 28px -8px var(--glow-1); }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .alt-link { font-size: 14px; color: var(--muted); }
+  .alt-link a { color: var(--fg); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+  .hero-meta {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hero-art { position: relative; justify-self: center; }
+  .hero-art::before {
+    content: "";
+    position: absolute;
+    inset: -25% -30%;
+    background: radial-gradient(closest-side, var(--glow-1), var(--glow-2), transparent 72%);
+    z-index: 0;
+  }
+  .hero-art img {
+    position: relative;
+    z-index: 1;
+    width: min(240px, 52vw);
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.28));
+  }
+  .live-chip {
+    position: absolute;
+    z-index: 2;
+    bottom: 6%;
+    left: -64px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+  }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex: none; }
+  .live-chip b { font-weight: 600; }
+  .live-chip span { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  section { padding: 8px 0 64px; }
+  h2 {
+    font-size: 26px;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    margin-bottom: 6px;
+    text-wrap: balance;
+  }
+  .section-sub { color: var(--muted); margin-bottom: 28px; max-width: 60ch; }
+
+  .bento { columns: 2; column-gap: 16px; margin-bottom: 8px; }
+  .bcard {
+    position: relative;
+    overflow: hidden;
+    break-inside: avoid;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px;
+    margin-bottom: 16px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .bcard:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--accent); }
+  .bcard::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), var(--glow-1), transparent 70%);
+  }
+  .bcard:hover::before { opacity: 1; }
+  .bcard-top { display: flex; align-items: center; gap: 13px; margin-bottom: 8px; }
+  .glyph {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid var(--border);
+  }
+  .glyph svg { width: 22px; height: 22px; display: block; }
+  .bcard h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .bcard p { color: var(--muted); font-size: 14.5px; }
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .step { position: relative; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+  .step:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--accent); }
+  .step::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), var(--glow-1), transparent 70%);
+  }
+  .step:hover::before { opacity: 1; }
+  .step-num { font-family: "Outfit", system-ui, sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; margin-bottom: 10px; }
+  .step p { font-size: 14px; color: var(--muted); }
+  .step p b { color: var(--fg); }
+
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 26px 0 40px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer a { color: var(--fg); text-decoration: none; }
+  footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  footer nav { display: flex; gap: 18px; padding: 0; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .rise { opacity: 0; animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.14s; } .d3 { animation-delay: 0.23s; }
+  .d4 { animation-delay: 0.32s; } .d5 { animation-delay: 0.4s; } .d6 { animation-delay: 0.48s; }
+  @media (prefers-reduced-motion: reduce) {
+    .rise { opacity: 1; animation: none; }
+    * { transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+  @media (max-width: 760px) {
+    .hero { grid-template-columns: 1fr; padding: 36px 0 64px; gap: 48px; }
+    .hero-art { order: -1; }
+    .live-chip { left: 50%; transform: translateX(-50%); bottom: -24px; }
+    .steps { grid-template-columns: 1fr; }
+    .bento { columns: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="rise d1">
+    <div class="brand display"><img src="icon.svg" alt="" width="30" height="30">WinThemeAuto</div>
+    <div class="nav-right">
+      <div class="seg" role="group" aria-label="Site color theme">
+        <span class="seg-pill" id="seg-pill" aria-hidden="true"></span>
+        <button type="button" data-mode="system">System</button>
+        <button type="button" data-mode="light">Light</button>
+        <button type="button" data-mode="dark">Dark</button>
+      </div>
+      <span class="nav-ver" id="nav-ver">latest</span>
+      <a href="https://github.com/alnyx-dev/WinThemeAuto">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <p class="eyebrow rise d2">Free · Open source · <b>Portable</b></p>
+      <h1 class="display rise d2">Day and night,<br>handled <span class="sun">by the sun.</span></h1>
+      <p class="lede rise d3">WinThemeAuto switches Windows between light and dark themes on your schedule — or follows real sunrise and sunset. One small exe, living quietly in your tray.</p>
+      <div class="cta-row rise d4">
+        <a class="btn" id="dl-x64" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x64.exe">Download for Windows</a>
+        <span class="alt-link"><span id="rec-note">64-bit recommended</span> · <a id="dl-x86" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x86.exe">32-bit build</a></span>
+      </div>
+      <p class="hero-meta rise d5" id="meta">Single portable .exe — no installer, no admin rights.</p>
+    </div>
+    <div class="hero-art rise d3">
+      <img src="icon.svg" width="240" height="240" alt="WinThemeAuto app icon — sun setting into night waves">
+      <div class="live-chip"><span class="live-dot"></span><b>Auto-switch on</b>&nbsp;<span id="chip-text">follows the sun</span></div>
+    </div>
+  </div>
+
+  <section>
+    <h2 class="display">Why it earns its tray slot</h2>
+    <p class="section-sub">Everything the big theme tools do, minus the installer, the service and the account.</p>
+    <div class="bento">
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg></span>
+          <h3>Time or sun, your call</h3>
+        </div>
+        <p>Fixed hours with overnight ranges, or offline sunrise/sunset math for your coordinates with minute offsets.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M4 17.5l4.5-4 3.5 3 3-2.5 5 3.5"/></svg></span>
+          <h3>Full themes, not just flags</h3>
+        </div>
+        <p>Point it at installed light and dark .theme files and the wallpaper changes along — silently, no flashing windows.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h16"/><circle cx="9" cy="8" r="2.4" fill="var(--card)"/><path d="M4 16h16"/><circle cx="15" cy="16" r="2.4" fill="currentColor" stroke="none"/></svg></span>
+          <h3>Apps and system, separately</h3>
+        </div>
+        <p>Dark apps with a light taskbar? Light apps after dark? Mix however you like.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v4h-4"/></svg></span>
+          <h3>Updates itself</h3>
+        </div>
+        <p>One click checks GitHub Releases, swaps the exe and restarts. Settings survive.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="3" width="16" height="16" rx="4"/><path d="M9 12h6"/></svg></span>
+          <h3>Stays out of the way</h3>
+        </div>
+        <p>Single tray icon, autostart, single instance. About 12 MB on disk, ~0% CPU idle.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="10" width="14" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <h3>Private by construction</h3>
+        </div>
+        <p>Everything lives in a local config file. The network is touched only when you press a button.</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="display">Up and running in a minute</h2>
+    <p class="section-sub">No installer, no wizard, no account.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num display">1</div>
+        <p><b>Download</b> the .exe above and run it.</p>
+      </div>
+      <div class="step">
+        <div class="step-num display">2</div>
+        <p><b>Enable auto-switch</b> and pick time or sunrise mode.</p>
+      </div>
+      <div class="step">
+        <div class="step-num display">3</div>
+        <p><b>Apply.</b> It moves to your tray from here.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>WinThemeAuto · MIT license</span>
+    <nav>
+      <a href="https://github.com/alnyx-dev/WinThemeAuto">GitHub</a>
+      <a href="https://github.com/alnyx-dev/WinThemeAuto/releases">All releases</a>
+    </nav>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var REPO = "alnyx-dev/WinThemeAuto";
+  try {
+    var ua = navigator.userAgent || "";
+    if (/WOW64|Win32/.test(ua) && !/Win64|x64/.test(ua)) {
+      document.getElementById("rec-note").textContent = "32-bit recommended for this PC";
+    }
+  } catch (e) { /* keep defaults */ }
+
+  function fmtMB(bytes) {
+    if (!bytes) return "";
+    return (bytes / 1048576).toFixed(1) + " MB";
+  }
+
+  function fmtHM(ms) {
+    var d = new Date(ms);
+    function p(n) { return String(n).padStart(2, "0"); }
+    return p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
+  // Same solar math as the app (src/sun.rs): sunrise/sunset UTC ms,
+  // or { polar: "day" } / { polar: "night" } beyond the polar circles.
+  function sunEvents(lat, lon, y, mo, d) {
+    var rad = Math.PI / 180;
+    var n = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(2000, 0, 1)) / 864e5);
+    lat = Math.max(-89.9, Math.min(89.9, lat));
+    var jStar = n - lon / 360;
+    var M = ((((357.5291 + 0.98560028 * jStar) % 360) + 360) % 360) * rad;
+    var C = 1.9148 * Math.sin(M) + 0.0200 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M);
+    var lambda = ((((M / rad + C + 180 + 102.9372) % 360) + 360) % 360) * rad;
+    var transit = 2451545.0 + jStar + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * lambda);
+    var dec = Math.asin(Math.sin(lambda) * Math.sin(23.4397 * rad));
+    var phi = lat * rad;
+    var cosH = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
+    if (cosH > 1) return { polar: "night" };
+    if (cosH < -1) return { polar: "day" };
+    var H = Math.acos(cosH) / rad;
+    function jdToMs(jd) { return (jd - 2440587.5) * 864e5; }
+    return { rise: jdToMs(transit - H / 360), set: jdToMs(transit + H / 360) };
+  }
+
+  function nextSwitchText(lat, lon) {
+    var now = new Date();
+    var today = sunEvents(lat, lon, now.getFullYear(), now.getMonth() + 1, now.getDate());
+    if (today.polar) {
+      return today.polar === "day" ? "light all day — polar day" : "dark all day — polar night";
+    }
+    var t = now.getTime();
+    if (t < today.rise) return "light at " + fmtHM(today.rise);
+    if (t < today.set) return "dark at " + fmtHM(today.set);
+    var tm = new Date(t + 864e5);
+    var next = sunEvents(lat, lon, tm.getFullYear(), tm.getMonth() + 1, tm.getDate());
+    if (next.polar || !next.rise) return "light at " + fmtHM(today.rise);
+    return "light at " + fmtHM(next.rise);
+  }
+
+  // Silent IP geolocation (no permission prompt), then a real preview.
+  function locate() {
+    return fetch("https://ipwho.is/").then(function (r) { return r.json(); }).then(function (j) {
+      if (j.success !== false && j.latitude != null && j.longitude != null) {
+        return { lat: j.latitude, lon: j.longitude, place: [j.city, j.country].filter(Boolean).join(", ") };
+      }
+      throw new Error("no coords");
+    }).catch(function () {
+      return fetch("https://ipapi.co/json/").then(function (r) { return r.json(); }).then(function (j) {
+        if (j.latitude != null && j.longitude != null) {
+          return { lat: j.latitude, lon: j.longitude, place: [j.city, j.country_name].filter(Boolean).join(", ") };
+        }
+        throw new Error("no coords");
+      });
+    });
+  }
+
+  // Site theme: System follows the OS live, Light/Dark pin it.
+  // Choice persists in localStorage.
+  var osDark = null;
+  try { osDark = matchMedia("(prefers-color-scheme: dark)"); } catch (e) {}
+  function systemTheme() {
+    return (osDark && osDark.matches) ? "dark" : "light";
+  }
+  function siteChoice() {
+    try {
+      var c = localStorage.getItem("wta-site-theme");
+      if (c === "system" || c === "light" || c === "dark") return c;
+    } catch (e) {}
+    return "system";
+  }
+  function movePill(choice) {
+    var pill = document.getElementById("seg-pill");
+    if (!pill) return;
+    var btns = document.querySelectorAll(".seg button");
+    var active = null;
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute("data-mode") === choice) { active = btns[i]; break; }
+    }
+    if (!active || !active.offsetWidth) return;
+    pill.style.left = active.offsetLeft + "px";
+    pill.style.width = active.offsetWidth + "px";
+    pill.classList.add("show");
+  }
+  function markSeg(choice) {
+    var btns = document.querySelectorAll(".seg button");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("on", btns[i].getAttribute("data-mode") === choice);
+    }
+    movePill(choice);
+  }
+  function applySiteTheme(t) {
+    document.documentElement.dataset.theme = t;
+    try { document.documentElement.style.colorScheme = t; } catch (e) {}
+  }
+  function refreshSiteTheme() {
+    var c = siteChoice();
+    applySiteTheme(c === "system" ? systemTheme() : c);
+    markSeg(c);
+  }
+  (function wireSeg() {
+    var btns = document.querySelectorAll(".seg button");
+    for (var i = 0; i < btns.length; i++) {
+      (function (b) {
+        b.addEventListener("click", function () {
+          try { localStorage.setItem("wta-site-theme", b.getAttribute("data-mode")); } catch (e) {}
+          refreshSiteTheme();
+        });
+      })(btns[i]);
+    }
+  })();
+  window.addEventListener("resize", function () { movePill(siteChoice()); });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { movePill(siteChoice()); });
+  }
+  function watchSystem() {
+    if (!osDark) return;
+    function onChange() { if (siteChoice() === "system") applySiteTheme(systemTheme()); }
+    if (osDark.addEventListener) osDark.addEventListener("change", onChange);
+    else if (osDark.addListener) osDark.addListener(onChange);
+  }
+  watchSystem();
+  refreshSiteTheme();
+
+  var chip = document.getElementById("chip-text");
+  chip.textContent = "locating…";
+  locate().then(function (loc) {
+    chip.textContent = "Next: " + nextSwitchText(loc.lat, loc.lon);
+    var chipBox = chip.closest(".live-chip");
+    if (chipBox) chipBox.title = loc.place ? "For " + loc.place : "For your location";
+  }).catch(function () {
+    chip.textContent = "follows the sun";
+  });
+
+  fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+    .then(function (rel) {
+      var assets = rel.assets || [];
+      function findAsset(part) {
+        for (var i = 0; i < assets.length; i++) {
+          if (assets[i].name.indexOf(part) !== -1) return assets[i];
+        }
+        return null;
+      }
+      var x64 = findAsset("x64"), x86 = findAsset("x86");
+      if (rel.tag_name) {
+        document.getElementById("nav-ver").textContent = rel.tag_name;
+      }
+      if (x64) document.getElementById("dl-x64").href = x64.browser_download_url;
+      if (x86) document.getElementById("dl-x86").href = x86.browser_download_url;
+      var bits = [];
+      if (x64) bits.push(fmtMB(x64.size));
+      var total = assets.reduce(function (s, a) { return s + (a.download_count || 0); }, 0);
+      if (total) bits.push(total + " downloads");
+      if (bits.length) {
+        document.getElementById("meta").textContent =
+          "Single portable .exe — no installer, no admin rights. " + bits.join(" · ");
+      }
+    })
+    .catch(function () { /* static fallback links keep working */ });
+
+  // Spotlight follows the cursor inside cards and steps.
+  (function spotlight() {
+    var cards = document.querySelectorAll(".bcard, .step");
+    for (var i = 0; i < cards.length; i++) {
+      (function (card) {
+        card.addEventListener("mousemove", function (ev) {
+          var r = card.getBoundingClientRect();
+          card.style.setProperty("--mx", (ev.clientX - r.left) + "px");
+          card.style.setProperty("--my", (ev.clientY - r.top) + "px");
+        });
+      })(cards[i]);
+    }
+  })();
+
+  // Reveal-on-scroll for cards and steps.
+  (function reveal() {
+    var reduce = false;
+    try { reduce = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    var els = document.querySelectorAll(".reveal, .step");
+    if (reduce || !("IntersectionObserver" in window)) {
+      for (var i = 0; i < els.length; i++) els[i].classList.add("in");
+      return;
+    }
+    for (var j = 0; j < els.length; j++) els[j].classList.add("reveal");
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.12 });
+    for (var k = 0; k < els.length; k++) io.observe(els[k]);
+  })();
+})();
+</script>
+</body>
+</html>
