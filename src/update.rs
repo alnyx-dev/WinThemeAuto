@@ -1,10 +1,3 @@
-//! Self-updates via GitHub Releases.
-//!
-//! Flow: check latest release tag -> compare with our version ->
-//! download the exe matching our architecture -> spawn a small updater
-//! script that waits for this process to exit, swaps the exe and
-//! restarts the app.
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::os::windows::process::CommandExt;
@@ -13,7 +6,6 @@ use std::time::Duration;
 
 const API_URL: &str = "https://api.github.com/repos/alnyx-dev/WinThemeAuto/releases/latest";
 
-/// Hides the updater console window.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn user_agent() -> String {
@@ -32,6 +24,14 @@ pub fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+pub fn open_releases_page() {
+    const URL: &str = "https://github.com/alnyx-dev/WinThemeAuto/releases";
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", URL])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+}
+
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,
@@ -42,21 +42,17 @@ struct Release {
 struct Asset {
     name: String,
     browser_download_url: String,
-    /// GitHub now sends `"sha256:<hex>"` for release assets.
     #[serde(default)]
     digest: Option<String>,
 }
 
 pub struct UpdateInfo {
-    /// Latest version without leading `v`, e.g. `"0.2.0"`.
     pub latest: String,
     pub download_url: String,
-    /// Lowercase hex SHA256 the downloaded exe must match.
     pub expected_sha256: String,
     pub is_newer: bool,
 }
 
-/// Parse `"v1.2.3"`, `"1.2"`, `"0.2.0-beta.1"` into `(major, minor, patch)`.
 pub fn parse_version(s: &str) -> Option<(u64, u64, u64)> {
     let s = s.trim();
     let s = s.strip_prefix('v').unwrap_or(s);
@@ -73,11 +69,6 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     }
 }
 
-/// Query GitHub for the latest release and the asset matching our arch.
-/// Also resolves the expected SHA256 — from the API `digest` field when
-/// present, otherwise from the `<exe>.sha256` checksum asset published
-/// by the release workflow. Fails when neither exists: installing an
-/// unverified exe is worse than asking for a manual download.
 pub fn check() -> Result<UpdateInfo> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
@@ -111,7 +102,7 @@ pub fn check() -> Result<UpdateInfo> {
     }
     let expected = expected.with_context(|| {
         format!(
-            "release {} has no checksum for {want} — download manually",
+            "release {} has no checksum for {want} вЂ” download manually",
             rel.tag_name
         )
     })?;
@@ -124,7 +115,6 @@ pub fn check() -> Result<UpdateInfo> {
     })
 }
 
-/// `"sha256:<hex>"` → lowercase hex, validated.
 fn parse_digest(digest: &str) -> Option<&str> {
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest).trim();
     if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -134,7 +124,6 @@ fn parse_digest(digest: &str) -> Option<&str> {
     }
 }
 
-/// Download a `<exe>.sha256` checksum file (`"<hex>  <filename>"` or plain hex).
 fn fetch_sha256(agent: &ureq::Agent, url: &str) -> Result<String> {
     let body = agent
         .get(url)
@@ -150,7 +139,6 @@ fn fetch_sha256(agent: &ureq::Agent, url: &str) -> Result<String> {
     }
 }
 
-/// SHA256 hex (lowercase) of a file.
 pub fn sha256_hex(path: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
@@ -167,9 +155,25 @@ pub fn sha256_hex(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-/// Download the new exe into the temp dir and verify its SHA256.
-/// Returns its path. Deletes and errors on mismatch.
-pub fn download(info: &UpdateInfo) -> Result<PathBuf> {
+pub fn human_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    let b = bytes as f64;
+    if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else if b >= KB {
+        format!("{:.0} KB", b / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+pub fn download(
+    info: &UpdateInfo,
+    cancel: &std::sync::atomic::AtomicBool,
+    on_progress: impl Fn(u64, Option<u64>),
+) -> Result<PathBuf> {
+    use std::sync::atomic::Ordering;
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(180))
         .build();
@@ -179,9 +183,27 @@ pub fn download(info: &UpdateInfo) -> Result<PathBuf> {
         .call()
         .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
 
+    let total: Option<u64> = resp.header("Content-Length").and_then(|v| v.parse().ok());
+
     let dest = std::env::temp_dir().join("WinThemeAuto-update.exe");
     let mut file = std::fs::File::create(&dest)?;
-    std::io::copy(&mut resp.into_reader(), &mut file)?;
+    let mut reader = resp.into_reader();
+    let mut buf = [0u8; 16384];
+    let mut done: u64 = 0;
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            drop(file);
+            let _ = std::fs::remove_file(&dest);
+            anyhow::bail!("cancelled by user");
+        }
+        let n = std::io::Read::read(&mut reader, &mut buf)?;
+        if n == 0 {
+            break;
+        }
+        std::io::Write::write_all(&mut file, &buf[..n])?;
+        done += n as u64;
+        on_progress(done, total);
+    }
     drop(file);
 
     let actual = sha256_hex(&dest)?;
@@ -196,9 +218,6 @@ pub fn download(info: &UpdateInfo) -> Result<PathBuf> {
     Ok(dest)
 }
 
-/// Spawn a hidden updater script that waits for this process to exit,
-/// replaces the current exe with `new_exe` and restarts the app.
-/// The caller should exit right after this returns `Ok`.
 pub fn self_install(new_exe: &Path) -> Result<()> {
     let current = std::env::current_exe().context("cannot locate current exe")?;
     let pid = std::process::id();
@@ -206,36 +225,72 @@ pub fn self_install(new_exe: &Path) -> Result<()> {
         .skip(1)
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-
-    // %1=pid %2=new exe %3=current exe %4..=restart args
-    let script_body = "@echo off\r\n\
-         set PID=%1\r\n\
-         set NEW=%2\r\n\
-         set CUR=%3\r\n\
-         shift & shift & shift\r\n\
-         :wait\r\n\
-         tasklist /FI \"PID eq %PID%\" 2>nul | find \"%PID%\" >nul\r\n\
-         if not errorlevel 1 (ping -n 2 127.0.0.1 >nul & goto wait)\r\n\
-         set TRIES=0\r\n\
-         :replace\r\n\
-         move /Y %NEW% %CUR% >nul\r\n\
-         if errorlevel 1 (set /A TRIES+=1 & if %TRIES% LSS 30 (ping -n 2 127.0.0.1 >nul & goto replace))\r\n\
-         start \"\" %CUR% %1 %2 %3 %4 %5 %6 %7 %8 %9\r\n\
-         del \"%~f0\"\r\n";
+    let script_body = build_updater_script(&current, new_exe, pid, &restart_args);
 
     let script = std::env::temp_dir().join("WinThemeAuto-do-update.bat");
     std::fs::write(&script, script_body)?;
 
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.arg("/C")
+    std::process::Command::new("cmd")
+        .arg("/C")
         .arg(&script)
-        .arg(pid.to_string())
-        .arg(new_exe)
-        .arg(&current)
-        .args(&restart_args)
-        .creation_flags(CREATE_NO_WINDOW);
-    cmd.spawn().context("cannot start updater")?;
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .context("cannot start updater")?;
     Ok(())
+}
+
+fn cmd_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+fn build_updater_script(
+    current: &Path,
+    new_exe: &Path,
+    pid: u32,
+    restart_args: &[String],
+) -> String {
+    let cur_q = cmd_quote(&current.to_string_lossy());
+    let new_q = cmd_quote(&new_exe.to_string_lossy());
+    let mut start_cur = format!("start \"\" {cur_q}");
+    let mut start_new = format!("start \"\" {new_q}");
+    for a in restart_args {
+        let q = cmd_quote(a);
+        start_cur.push(' ');
+        start_cur.push_str(&q);
+        start_new.push(' ');
+        start_new.push_str(&q);
+    }
+    format!(
+        "@echo off\r\n\
+         set \"PID={pid}\"\r\n\
+         set /A N=0\r\n\
+         :wait\r\n\
+         tasklist /FI \"PID eq %PID%\" 2>nul | find \"%PID%\" >nul\r\n\
+         if errorlevel 1 goto exited\r\n\
+         set /A N+=1\r\n\
+         if %N% GEQ 90 goto exited\r\n\
+         ping -n 2 127.0.0.1 >nul\r\n\
+         goto wait\r\n\
+         :exited\r\n\
+         set /A TRIES=0\r\n\
+         :replace\r\n\
+         move /Y {new_q} {cur_q} >nul\r\n\
+         if not errorlevel 1 goto replaced\r\n\
+         set /A TRIES+=1\r\n\
+         if %TRIES% GEQ 30 goto replace_failed\r\n\
+         ping -n 2 127.0.0.1 >nul\r\n\
+         goto replace\r\n\
+         :replaced\r\n\
+         {start_cur}\r\n\
+         del \"%~f0\"\r\n\
+         goto :eof\r\n\
+         :replace_failed\r\n\
+         rem Replace failed (locked file?) вЂ” run the new build from its temp\r\n\
+         rem path instead of silently booting the stale exe; the next check\r\n\
+         rem retries the replace.\r\n\
+         {start_new}\r\n\
+         del \"%~f0\"\r\n"
+    )
 }
 
 #[cfg(test)]
@@ -279,7 +334,6 @@ mod tests {
         assert!(asset
             .browser_download_url
             .starts_with("https://example.com/"));
-        // Old assets without digest still parse (digest defaults to None).
         let old_json = r#"{"tag_name":"v0.1.0","assets":[
             {"name":"WinThemeAuto-x64.exe","browser_download_url":"https://example.com/x64.exe"}]}"#;
         let old: Release = serde_json::from_str(old_json).unwrap();
@@ -296,6 +350,14 @@ mod tests {
     }
 
     #[test]
+    fn human_size_formats() {
+        assert_eq!(human_size(0), "0 B");
+        assert_eq!(human_size(512), "512 B");
+        assert_eq!(human_size(2048), "2 KB");
+        assert_eq!(human_size(12_582_912), "12.0 MB");
+    }
+
+    #[test]
     fn sha256_of_empty_file() {
         let path = std::env::temp_dir().join("winthemeauto-sha-test.bin");
         std::fs::write(&path, []).unwrap();
@@ -305,5 +367,42 @@ mod tests {
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn cmd_quote_wraps_and_escapes() {
+        assert_eq!(cmd_quote("--tray"), "\"--tray\"");
+        assert_eq!(
+            cmd_quote(r"C:\My Apps\tool.exe"),
+            "\"C:\\My Apps\\tool.exe\""
+        );
+    }
+
+    #[test]
+    fn updater_script_embeds_everything() {
+        let cur = Path::new(r"C:\Apps\WinThemeAuto-x64.exe");
+        let new = Path::new(r"C:\Temp\WinThemeAuto-update.exe");
+        let args = [
+            "--tray".to_string(),
+            "--extra".to_string(),
+            "a b".to_string(),
+        ];
+        let body = build_updater_script(cur, new, 1234, &args);
+        assert!(!body.contains("%1"), "must not use %n params");
+        assert!(body.contains(
+            r#"move /Y "C:\Temp\WinThemeAuto-update.exe" "C:\Apps\WinThemeAuto-x64.exe""#
+        ));
+        for a in [&"--tray", &"--extra", "\"a b\""] {
+            assert!(body.contains(a), "missing {a}");
+        }
+        let starts: Vec<&str> = body
+            .lines()
+            .filter(|l| l.starts_with("start \"\""))
+            .collect();
+        assert_eq!(starts.len(), 2);
+        assert!(starts[0].contains(r#""C:\Apps\WinThemeAuto-x64.exe""#));
+        assert!(starts[1].contains(r#""C:\Temp\WinThemeAuto-update.exe""#));
+        assert!(body.contains("GEQ 90"));
+        assert!(body.contains("set \"PID=1234\""));
     }
 }

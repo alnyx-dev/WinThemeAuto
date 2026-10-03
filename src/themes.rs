@@ -1,21 +1,13 @@
-//! Installed Windows themes (`.theme` files).
-//!
-//! Used to offer full light/dark theme selection: applying a theme means
-//! switching the light/dark flags (see [`crate::theme`]) plus swapping the
-//! wallpaper the theme points at — silently, without launching anything.
-
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct ThemeEntry {
-    /// Display name (from `[Theme] DisplayName`, or file stem as fallback).
     pub name: String,
     pub path: PathBuf,
     pub wallpaper: Option<PathBuf>,
-    /// `Some("light")` / `Some("dark")` from `[VisualStyles] SystemMode`.
     pub system_mode: Option<String>,
-    /// Same, from `[VisualStyles] AppMode`.
     pub app_mode: Option<String>,
+    pub user: bool,
 }
 
 fn system_themes_dir() -> PathBuf {
@@ -28,45 +20,57 @@ fn user_themes_dir() -> Option<PathBuf> {
     dirs::data_local_dir().map(|d| d.join("Microsoft").join("Windows").join("Themes"))
 }
 
-/// All installed themes, system first, then user ones.
 pub fn enumerate() -> Vec<ThemeEntry> {
-    let mut out = Vec::new();
-    for dir in [Some(system_themes_dir()), user_themes_dir()]
-        .into_iter()
-        .flatten()
-    {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            if !path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("theme"))
-            {
-                continue;
-            }
-            out.push(parse_entry(&path));
-        }
+    let mut sys = Vec::new();
+    let mut usr = Vec::new();
+    collect_dir(&system_themes_dir(), false, &mut sys);
+    if let Some(dir) = user_themes_dir() {
+        collect_dir(&dir, true, &mut usr);
     }
-    out.sort_by_key(|t| t.name.to_lowercase());
-    out
+    sys.sort_by_key(|t: &ThemeEntry| t.name.to_lowercase());
+    usr.sort_by_key(|t: &ThemeEntry| t.name.to_lowercase());
+    sys.extend(usr);
+    sys
 }
 
-/// Display name with the theme's own mode as a hint, e.g. `"Windows (Dark)"`.
+fn collect_dir(dir: &Path, user: bool, out: &mut Vec<ThemeEntry>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("theme"))
+        {
+            continue;
+        }
+        out.push(parse_entry(&path, user));
+    }
+}
+
 pub fn display_name(t: &ThemeEntry) -> String {
     let mode = t.system_mode.as_deref().or(t.app_mode.as_deref());
+    let mut tags: Vec<&str> = Vec::new();
     match mode {
-        Some("light") => format!("{} (Light)", t.name),
-        Some("dark") => format!("{} (Dark)", t.name),
-        _ => t.name.clone(),
+        Some("light") => tags.push("Light"),
+        Some("dark") => tags.push("Dark"),
+        _ => {}
+    }
+    if t.user {
+        tags.push("user");
+    }
+    if tags.is_empty() {
+        t.name.clone()
+    } else {
+        format!("{} ({})", t.name, tags.join(", "))
     }
 }
 
-fn parse_entry(path: &Path) -> ThemeEntry {
+fn parse_entry(path: &Path, user: bool) -> ThemeEntry {
     let text = read_text(path);
     let sections = parse_ini(&text);
     let get = |section: &str, key: &str| {
@@ -101,17 +105,14 @@ fn parse_entry(path: &Path) -> ThemeEntry {
         wallpaper,
         system_mode: norm_mode(get("VisualStyles", "SystemMode")),
         app_mode: norm_mode(get("VisualStyles", "AppMode")),
+        user,
     }
 }
 
-/// Read a `.theme` file regardless of encoding (UTF-8, UTF-16 LE, legacy).
 fn read_text(path: &Path) -> String {
     let Ok(bytes) = std::fs::read(path) else {
         return String::new();
     };
-    if let Ok(s) = String::from_utf8(bytes.clone()) {
-        return s;
-    }
     let words = |data: &[u8]| {
         data.as_chunks::<2>()
             .0
@@ -119,13 +120,31 @@ fn read_text(path: &Path) -> String {
             .map(|c| u16::from_le_bytes(*c))
             .collect::<Vec<_>>()
     };
-    // With BOM.
+    if let Ok(s) = String::from_utf8(bytes.clone()) {
+        if !s.contains('\0') {
+            return s;
+        }
+        let w = words(&bytes);
+        if let Ok(le) = String::from_utf16(&w) {
+            if looks_like_ini(&le) {
+                return le;
+            }
+        }
+        return s;
+    }
     if bytes.starts_with(&[0xFF, 0xFE]) {
         if let Ok(s) = String::from_utf16(&words(&bytes[2..])) {
             return s;
         }
     }
-    // Without BOM: ASCII-range UTF-16LE has a zero high byte in most words.
+    if bytes.len() % 2 == 0 && bytes.len() >= 4 {
+        let w = words(&bytes);
+        if let Ok(s) = String::from_utf16(&w) {
+            if looks_like_ini(&s) {
+                return s;
+            }
+        }
+    }
     if bytes.len() % 2 == 0 && bytes.len() >= 4 {
         let w = words(&bytes);
         if String::from_utf16(&w).is_ok()
@@ -134,14 +153,15 @@ fn read_text(path: &Path) -> String {
             return String::from_utf16(&w).unwrap_or_default();
         }
     }
-    // Last resort: byte-to-char mapping keeps ASCII readable.
     bytes.iter().map(|&b| b as char).collect()
 }
 
-/// Minimal case-preserving INI parser: `[(section, [(key, value)])]`.
+fn looks_like_ini(s: &str) -> bool {
+    s.contains('[') && s.contains('=')
+}
+
 fn parse_ini(text: &str) -> Vec<(String, Vec<(String, String)>)> {
     let mut sections: Vec<(String, Vec<(String, String)>)> = Vec::new();
-    // Strip BOM if present.
     let text = text.strip_prefix('\u{FEFF}').unwrap_or(text);
     for line in text.lines() {
         let line = line.trim().trim_end_matches('\0');
@@ -163,10 +183,8 @@ fn parse_ini(text: &str) -> Vec<(String, Vec<(String, String)>)> {
     sections
 }
 
-/// Expand `%VAR%` placeholders (theme files use `%SystemRoot%`, etc.).
 fn expand_env(s: String) -> String {
     let mut out = s;
-    // Iterate: values may themselves contain variables.
     for _ in 0..5 {
         let Some(start) = out.find('%') else {
             break;
@@ -229,7 +247,7 @@ mod tests {
         std::fs::write(&path, &bytes).unwrap();
         let text = read_text(&path);
         assert!(text.contains("DisplayName=My Light Theme"), "got {text:?}");
-        let entry = parse_entry(&path);
+        let entry = parse_entry(&path, false);
         assert_eq!(entry.name, "My Light Theme");
         assert_eq!(entry.system_mode.as_deref(), Some("light"));
         assert_eq!(entry.app_mode.as_deref(), Some("dark"));
@@ -249,9 +267,8 @@ mod tests {
         let dir = std::env::temp_dir().join("winthemeauto-test");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("plain.theme");
-        // No DisplayName -> falls back to file stem (underscores become spaces).
         std::fs::write(&path, "[Control Panel\\Desktop]\nWallpaper=C:\\a.jpg\n").unwrap();
-        let entry = parse_entry(&path);
+        let entry = parse_entry(&path, false);
         assert_eq!(entry.name, "plain");
         assert_eq!(
             entry
@@ -265,9 +282,45 @@ mod tests {
 
     #[test]
     fn enumerate_finds_system_themes() {
-        // Any real Windows install ships themes in C:\Windows\Resources\Themes.
         let all = enumerate();
         assert!(!all.is_empty(), "no .theme files found");
         assert!(all.iter().all(|t| !t.name.is_empty() && t.path.exists()));
+    }
+
+    #[test]
+    fn user_tag_disambiguates_dupes() {
+        let mk = |user: bool| ThemeEntry {
+            name: "Windows".to_string(),
+            path: PathBuf::from(if user {
+                r"C:\U\a.theme"
+            } else {
+                r"C:\W\a.theme"
+            }),
+            wallpaper: None,
+            system_mode: Some("dark".to_string()),
+            app_mode: None,
+            user,
+        };
+        assert_eq!(display_name(&mk(false)), "Windows (Dark)");
+        assert_eq!(display_name(&mk(true)), "Windows (Dark, user)");
+    }
+
+    #[test]
+    fn utf16_no_bom_cyrillic_reads() {
+        let dir = std::env::temp_dir().join("winthemeauto-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("cyr.theme");
+        let sample =
+            "[Theme]\r\nDisplayName=РњРѕСЏ РўС‘РјРЅР°СЏ РўРµРјР°\r\n[VisualStyles]\r\nSystemMode=Dark\r\n";
+        let mut bytes = Vec::new();
+        for w in sample.encode_utf16() {
+            bytes.extend_from_slice(&w.to_le_bytes());
+        }
+        std::fs::write(&path, &bytes).unwrap();
+        let entry = parse_entry(&path, true);
+        assert_eq!(entry.name, "РњРѕСЏ РўС‘РјРЅР°СЏ РўРµРјР°");
+        assert_eq!(entry.system_mode.as_deref(), Some("dark"));
+        assert!(entry.user);
+        let _ = std::fs::remove_file(&path);
     }
 }

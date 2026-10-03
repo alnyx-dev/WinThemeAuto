@@ -185,6 +185,8 @@ Example:
   "dark_offset_min": 15,
   "change_apps": true,
   "change_system": true,
+  "light_theme": "C:/Windows/Resources/Themes/aero.theme",
+  "dark_theme": "",
   "light_wallpaper": "C:/Wallpapers/day.jpg",
   "dark_wallpaper": "C:/Wallpapers/night.jpg",
   "accent_enabled": true,
@@ -327,16 +329,26 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 |---------|-----|
 | `Time must be HH:MM` | Use 24-hour format, e.g. `07:30`. |
 | `Light and dark times must differ` | Pick two different times. |
+| `Offset must be an integer from -180 to 180` | Offsets are minutes, e.g. `-30` = 30 min early. |
+| `Auto-switch needs Apps or System` | Enable at least one of **Apps** / **System** while auto is on. |
+| `Failed to save settings: …` | `%APPDATA%\WinThemeAuto` not writable — check permissions/antivirus; a corrupt file is backed up to `config.json.corrupt*.bak`. |
 | `Enter coordinates…` | Sun mode needs valid lat/lon — use **Detect via IP** or enter manually. |
 | `Location failed…` | No internet or IP service blocked — enter coordinates manually. |
 | `Nothing to toggle` | Enable at least one of **Apps** / **System**. |
-| `No switches: polar day/night` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
+| `No switches` / `Polar day/night — stays …` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
 | `Light/Dark wallpaper not found` | The custom path must point to an existing file — use the `…` picker or fix the path. |
 | `Light/Dark accent must be hex RGB` | Use 6 hex digits, e.g. `0078D4` (a leading `#` is fine too). |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.3.0
+- ✋ Manual override that sticks: Switch holds the hand-picked theme until the next scheduled change (auto no longer snaps it back in 5 s)
+- 🌞🌙 Theme-aware tray: sun icon by day, moon by night, fully translated menu
+- ✅ Honest Apply: edits are a draft until Apply (dirty `•` marker), language and autostart apply instantly and never get blocked by a broken time/coordinates
+- 🖼️ Wallpaper thumbnails + one-click clear; update downloads show live progress with Cancel; Releases button
+- 🛠️ Core fixes: external theme drift reconciled every tick, fail-closed single instance, accent/wallpaper applied on Apply when auto is off, bounded updater script with stale-exe fallback, DST-exact countdowns, Cyrillic `.theme` names, strict coordinates, fixed window size with Apply pinned at the bottom
 
 ### v0.2.8
 - 🖥️ Headless CLI: `--toggle` / `--light` / `--dark` / `--status` / `--help` for hotkeys and scripts (works alongside the running app)

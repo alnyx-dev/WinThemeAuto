@@ -36,15 +36,10 @@ impl Theme {
 }
 
 pub fn current_pair() -> (Theme, Theme) {
-    // Missing key/value = Windows default (light). See `try_current_pair`
-    // when you need to distinguish "explicit light" from "never set".
     let (apps, sys) = try_current_pair();
     (apps.unwrap_or(Theme::Light), sys.unwrap_or(Theme::Light))
 }
 
-/// Raw registry read: `None` when the key/value is absent or unreadable.
-/// Used for diagnostics; most callers want [`current_pair`] with its
-/// Windows-default fallback.
 pub fn try_current_pair() -> (Option<Theme>, Option<Theme>) {
     let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey(KEY).ok();
     let get = |name: &str| {
@@ -110,20 +105,46 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
     Ok(())
 }
 
-/// Re-broadcast a theme/color change: immediate refresh plus one more
-/// after 200 ms for slow apps, with taskbar invalidation.
 pub fn notify_updated() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    };
+    use std::time::{Duration, Instant};
+    static LAST: Mutex<Option<Instant>> = Mutex::new(None);
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        if let Some(t) = *last {
+            if now.duration_since(t) < Duration::from_millis(500) {
+                if !PENDING.swap(true, Ordering::SeqCst) {
+                    std::thread::spawn(|| {
+                        std::thread::sleep(Duration::from_millis(500));
+                        PENDING.store(false, Ordering::SeqCst);
+                        {
+                            let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+                            *last = Some(Instant::now());
+                        }
+                        broadcast_change();
+                        refresh_taskbars();
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        broadcast_change();
+                    });
+                }
+                return;
+            }
+        }
+        *last = Some(now);
+    }
     std::thread::spawn(|| {
         broadcast_change();
         refresh_taskbars();
-        // A second broadcast shortly after: some apps only pick up the
-        // change once their message queue has settled.
         std::thread::sleep(std::time::Duration::from_millis(200));
         broadcast_change();
     });
 }
 
-/// Point the desktop wallpaper at `path` (used for full-theme switching).
 pub fn set_wallpaper(path: &Path) -> Result<()> {
     let wide: Vec<u16> = path
         .as_os_str()

@@ -10,14 +10,27 @@ component AccentSwatch inherits Rectangle {
     height: 22px;
     border-radius: 6px;
     background: swatch-color;
-    border-width: active ? 2px : 1px;
-    border-color: active ? #0f172a : #00000033;
+    border-width: (active || fs.has-focus) ? 2px : 1px;
+    border-color: fs.has-focus ? #2563eb : (active ? #0f172a : #00000033);
+
+    fs := FocusScope {
+        accessible-role: button;
+        accessible-label: "accent color " + root.hex;
+        key-pressed(event) => {
+            if (event.text == "\n" || event.text == " ") {
+                root.chosen(root.hex);
+                accept
+            } else {
+                reject
+            }
+        }
+    }
 
     TouchArea {
         width: parent.width;
         height: parent.height;
         mouse-cursor: pointer;
-        clicked => { root.chosen(root.hex); }
+        clicked => { fs.focus(); root.chosen(root.hex); }
     }
 }
 
@@ -25,8 +38,8 @@ export component MainWindow inherits Window {
     title: "WinThemeAuto";
     icon: @image-url("../icon.svg");
     background: #eef1f6;
-    preferred-width: 460px;
-    min-width: 360px;
+    preferred-width: 500px;
+    min-width: 480px;
 
     in property <bool> is-dark;
     in property <string> status;
@@ -61,8 +74,14 @@ export component MainWindow inherits Window {
     in-out property <string> light-accent;
     in-out property <string> dark-accent;
     in-out property <int> lang-index;
+    in property <bool> dirty;
+    in property <bool> show-close-dialog;
+    in-out property <bool> close-never-ask;
+    in property <image> light-wp-preview;
+    in property <bool> light-wp-has;
+    in property <image> dark-wp-preview;
+    in property <bool> dark-wp-has;
 
-    // Localized labels, pushed from Rust (no restart needed).
     in property <string> t-tab-auto;
     in property <string> t-tab-appearance;
     in property <string> t-tab-settings;
@@ -96,24 +115,39 @@ export component MainWindow inherits Window {
     in property <string> t-light-now;
     in property <string> t-dark-now;
     in property <string> t-language;
+    in property <string> t-releases;
+    in property <string> t-onboard;
+    in property <string> t-cancel;
+    in property <string> t-close-title;
+    in property <string> t-close-body;
+    in property <string> t-close-minimize;
+    in property <string> t-close-quit;
+    in property <string> t-close-never;
 
     callback toggle-theme();
     callback settings-changed();
+    callback apply-settings();
+    callback language-changed();
+    callback autostart-changed();
     callback detect-location();
     callback browse-light-wallpaper();
     callback browse-dark-wallpaper();
     callback check-updates();
+    callback cancel-update();
+    callback open-releases();
+    callback clear-light-wallpaper();
+    callback clear-dark-wallpaper();
     callback refresh-themes();
+    callback close-minimize();
+    callback close-quit();
 
-    // Pure UI navigation, no Rust involvement.
-    property <int> tab-index: 0;
+    in-out property <int> tab-index: 0;
 
     VerticalBox {
         padding: 10px;
         spacing: 8px;
         alignment: start;
 
-        // ── Header (compact, one row) ──
         Rectangle {
             background: white;
             border-width: 1px;
@@ -141,24 +175,29 @@ export component MainWindow inherits Window {
                             color: #0f172a;
                         }
                         Text {
-                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " • " : root.t-light-now + " • ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
+                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " вЂў " : root.t-light-now + " вЂў ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
                             font-size: 12px;
                             color: #64748b;
                             overflow: elide;
+                        }
+                        if !root.auto-enabled : Text {
+                            text: root.t-onboard;
+                            font-size: 11px;
+                            color: #64748b;
+                            wrap: word-wrap;
                         }
                     }
                     Button {
                         text: root.is-dark ? root.t-to-light : root.t-to-dark;
                         primary: true;
+                        min-width: 110px;
                         clicked => { root.toggle-theme(); }
                     }
                 }
             }
         }
 
-        // (Next switch lives in the header subtitle — fixed height, no jumps.)
 
-        // ── Tab bar (always visible) ──
         HorizontalBox {
             padding: 0px;
             spacing: 6px;
@@ -172,7 +211,7 @@ export component MainWindow inherits Window {
                 text: root.t-tab-appearance;
                 primary: root.tab-index == 1;
                 horizontal-stretch: 1;
-                clicked => { root.tab-index = 1; root.refresh-themes(); }
+                clicked => { root.tab-index = 1; }
             }
             Button {
                 text: root.t-tab-settings;
@@ -182,7 +221,12 @@ export component MainWindow inherits Window {
             }
         }
 
-        // ── Auto switch ──
+        Rectangle {
+            height: 400px;
+            VerticalBox {
+                padding: 0px;
+                spacing: 0px;
+                alignment: start;
         if root.tab-index == 0 : Rectangle {
             background: white;
             border-width: 1px;
@@ -247,7 +291,7 @@ export component MainWindow inherits Window {
                             text <=> root.light-at;
                             placeholder-text: "07:00";
                             width: 90px;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                         Text {
                             text: root.t-dark-from;
@@ -260,7 +304,7 @@ export component MainWindow inherits Window {
                             text <=> root.dark-at;
                             placeholder-text: "19:00";
                             width: 90px;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                     }
                 }
@@ -275,21 +319,21 @@ export component MainWindow inherits Window {
                             text <=> root.lat;
                             placeholder-text: root.t-lat-ph;
                             horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                         LineEdit {
                             text <=> root.lon;
                             placeholder-text: root.t-lon-ph;
                             horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                         Button {
-                            text: root.locating ? "…" : root.t-detect;
+                            text: root.locating ? "вЂ¦" : root.t-detect;
                             enabled: !root.locating;
+                            min-width: 92px;
                             clicked => { root.detect-location(); }
                         }
                     }
-                    // Fixed heights: Detect only fills text, window never grows.
                     Text {
                         text: root.geo-hint;
                         height: 14px;
@@ -315,9 +359,9 @@ export component MainWindow inherits Window {
                         }
                         LineEdit {
                             text <=> root.light-offset;
-                            placeholder-text: "0";
+                            placeholder-text: "-180вЂ¦180";
                             horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                         Text {
                             text: root.t-dark-pm;
@@ -327,9 +371,9 @@ export component MainWindow inherits Window {
                         }
                         LineEdit {
                             text <=> root.dark-offset;
-                            placeholder-text: "0";
+                            placeholder-text: "-180вЂ¦180";
                             horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); }
+                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                     }
                 }
@@ -360,7 +404,6 @@ export component MainWindow inherits Window {
             }
         }
 
-        // ── Appearance: themes, wallpapers, accent (one card) ──
         if root.tab-index == 1 : Rectangle {
             background: white;
             border-width: 1px;
@@ -376,7 +419,7 @@ export component MainWindow inherits Window {
                         text: root.t-light-label;
                         font-size: 12px;
                         color: #64748b;
-                        width: 38px;
+                        width: 60px;
                         vertical-alignment: center;
                     }
                     ComboBox {
@@ -393,7 +436,7 @@ export component MainWindow inherits Window {
                         text: root.t-dark-label;
                         font-size: 12px;
                         color: #64748b;
-                        width: 38px;
+                        width: 60px;
                         vertical-alignment: center;
                     }
                     ComboBox {
@@ -408,7 +451,7 @@ export component MainWindow inherits Window {
                     spacing: 6px;
                     Text {
                         text: "";
-                        width: 38px;
+                        width: 60px;
                     }
                     Button {
                         text: root.t-rescan;
@@ -419,29 +462,63 @@ export component MainWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 6px;
+                    if root.light-wp-has : Rectangle {
+                        width: 56px;
+                        height: 32px;
+                        border-radius: 6px;
+                        clip: true;
+                        background: #00000022;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            source: root.light-wp-preview;
+                            image-fit: cover;
+                        }
+                    }
                     LineEdit {
                         text <=> root.light-wallpaper;
                         placeholder-text: root.t-light-wp-ph;
                         horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); }
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     Button {
-                        text: "…";
+                        text: "вЂ¦";
                         clicked => { root.browse-light-wallpaper(); }
+                    }
+                    Button {
+                        text: "Г—";
+                        clicked => { root.clear-light-wallpaper(); }
                     }
                 }
                 HorizontalBox {
                     padding: 0px;
                     spacing: 6px;
+                    if root.dark-wp-has : Rectangle {
+                        width: 56px;
+                        height: 32px;
+                        border-radius: 6px;
+                        clip: true;
+                        background: #00000022;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            source: root.dark-wp-preview;
+                            image-fit: cover;
+                        }
+                    }
                     LineEdit {
                         text <=> root.dark-wallpaper;
                         placeholder-text: root.t-dark-wp-ph;
                         horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); }
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     Button {
-                        text: "…";
+                        text: "вЂ¦";
                         clicked => { root.browse-dark-wallpaper(); }
+                    }
+                    Button {
+                        text: "Г—";
+                        clicked => { root.clear-dark-wallpaper(); }
                     }
                 }
                 Text {
@@ -466,14 +543,14 @@ export component MainWindow inherits Window {
                         text: root.t-light-label;
                         font-size: 12px;
                         color: #64748b;
-                        width: 38px;
+                        width: 60px;
                         vertical-alignment: center;
                     }
                     LineEdit {
                         text <=> root.light-accent;
                         placeholder-text: "0078D4";
                         horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); }
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.light-accent == "FFB900"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
                     AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.light-accent == "E81123"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
@@ -491,14 +568,14 @@ export component MainWindow inherits Window {
                         text: root.t-dark-label;
                         font-size: 12px;
                         color: #64748b;
-                        width: 38px;
+                        width: 60px;
                         vertical-alignment: center;
                     }
                     LineEdit {
                         text <=> root.dark-accent;
                         placeholder-text: "0078D4";
                         horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); }
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.dark-accent == "FFB900"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
                     AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.dark-accent == "E81123"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
@@ -518,7 +595,6 @@ export component MainWindow inherits Window {
             }
         }
 
-        // ── Settings ──
         if root.tab-index == 2 : VerticalBox {
             padding: 0px;
             spacing: 8px;
@@ -533,7 +609,7 @@ export component MainWindow inherits Window {
                     CheckBox {
                         text: root.t-autostart;
                         checked <=> root.autostart;
-                        toggled => { root.settings-changed(); }
+                        toggled => { root.autostart-changed(); }
                     }
                     HorizontalBox {
                         padding: 0px;
@@ -550,7 +626,7 @@ export component MainWindow inherits Window {
                             primary: root.lang-index == 0;
                             clicked => {
                                 root.lang-index = 0;
-                                root.settings-changed();
+                                root.language-changed();
                             }
                         }
                         Button {
@@ -558,7 +634,7 @@ export component MainWindow inherits Window {
                             primary: root.lang-index == 1;
                             clicked => {
                                 root.lang-index = 1;
-                                root.settings-changed();
+                                root.language-changed();
                             }
                         }
                     }
@@ -589,25 +665,96 @@ export component MainWindow inherits Window {
                             horizontal-stretch: 1;
                             overflow: elide;
                         }
+                        if !root.checking-update : Button {
+                            text: root.t-releases;
+                            clicked => { root.open-releases(); }
+                        }
+                        if root.checking-update : Button {
+                            text: root.t-cancel;
+                            clicked => { root.cancel-update(); }
+                        }
                     }
                 }
             }
+            }
+        }
         }
 
-        // ── Slim footer: errors only + Apply, always visible ──
-        Text {
+        if root.status != "" : Text {
             text: root.status;
-            height: 14px;
             font-size: 11px;
             font-weight: 600;
             color: #b91c1c;
-            overflow: elide;
+            wrap: word-wrap;
         }
         Button {
-            text: root.t-apply;
+            text: root.dirty ? root.t-apply + " вЂў" : root.t-apply;
             primary: true;
             horizontal-stretch: 1;
-            clicked => { root.settings-changed(); }
+            clicked => { root.apply-settings(); }
+        }
+    }
+
+    if root.show-close-dialog : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #00000088;
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+        }
+        VerticalBox {
+            padding: 48px;
+            alignment: center;
+            HorizontalBox {
+                padding: 0px;
+                alignment: center;
+                Rectangle {
+                    width: 330px;
+                    background: white;
+                    border-width: 1px;
+                    border-color: #e2e8f0;
+                    border-radius: 12px;
+                    VerticalBox {
+                        padding: 14px;
+                        spacing: 10px;
+                        Text {
+                            text: root.t-close-title;
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #0f172a;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: root.t-close-body;
+                            font-size: 12px;
+                            color: #64748b;
+                            wrap: word-wrap;
+                        }
+                        CheckBox {
+                            text: root.t-close-never;
+                            checked <=> root.close-never-ask;
+                        }
+                        HorizontalBox {
+                            padding: 0px;
+                            spacing: 8px;
+                            Button {
+                                text: root.t-close-minimize;
+                                primary: true;
+                                horizontal-stretch: 1;
+                                clicked => { root.close-minimize(); }
+                            }
+                            Button {
+                                text: root.t-close-quit;
+                                horizontal-stretch: 1;
+                                clicked => { root.close-quit(); }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

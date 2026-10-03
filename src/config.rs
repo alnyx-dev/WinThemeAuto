@@ -17,34 +17,21 @@ pub struct Config {
     pub mode: Mode,
     pub light_at: NaiveTime,
     pub dark_at: NaiveTime,
-    /// Latitude in degrees, `None` = not set yet.
-    /// `Some(0.0)` is a valid location (Gulf of Guinea), unlike the old
-    /// `0.0 == unset` sentinel.
     pub lat: Option<f64>,
-    /// Longitude in degrees, `None` = not set yet.
     pub lon: Option<f64>,
     pub light_offset_min: i32,
     pub dark_offset_min: i32,
     pub change_apps: bool,
     pub change_system: bool,
-    /// Full `.theme` file applied on light switch ("" = flags only).
     pub light_theme: String,
-    /// Full `.theme` file applied on dark switch ("" = flags only).
     pub dark_theme: String,
-    /// Custom wallpaper for light mode ("" = use theme wallpaper).
-    /// Wins over `light_theme` wallpaper when set.
     pub light_wallpaper: String,
-    /// Custom wallpaper for dark mode ("" = use theme wallpaper).
-    /// Wins over `dark_theme` wallpaper when set.
     pub dark_wallpaper: String,
-    /// Sync the Windows accent color with the theme.
     pub accent_enabled: bool,
-    /// Accent for light mode, hex `RRGGBB` (e.g. `"0078D4"`).
     pub light_accent: String,
-    /// Accent for dark mode, hex `RRGGBB`.
     pub dark_accent: String,
-    /// UI language code: `"en"` or `"ru"`.
     pub language: String,
+    pub close_hint_acked: bool,
 }
 
 impl Default for Config {
@@ -68,6 +55,7 @@ impl Default for Config {
             light_accent: "0078D4".to_string(),
             dark_accent: "0078D4".to_string(),
             language: "en".to_string(),
+            close_hint_acked: false,
         }
     }
 }
@@ -91,8 +79,19 @@ fn normalize_lon(mut lon: f64) -> f64 {
     }
 }
 
+fn unique_backup(path: &std::path::Path) -> PathBuf {
+    let base = path.with_extension("json.corrupt.bak");
+    if !base.exists() {
+        return base;
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    path.with_extension(format!("json.corrupt.{stamp}.bak"))
+}
+
 fn sanitize(cfg: &mut Config) {
-    // `None` = never set; `Some(0.0)` is a real place (Gulf of Guinea).
     cfg.lat = cfg
         .lat
         .filter(|v| v.is_finite())
@@ -100,8 +99,27 @@ fn sanitize(cfg: &mut Config) {
     cfg.lon = cfg.lon.filter(|v| v.is_finite()).map(normalize_lon);
     cfg.light_offset_min = cfg.light_offset_min.clamp(-180, 180);
     cfg.dark_offset_min = cfg.dark_offset_min.clamp(-180, 180);
+    cfg.light_at = truncate_secs(cfg.light_at);
+    cfg.dark_at = truncate_secs(cfg.dark_at);
     let lang = crate::i18n::Lang::from_code(&cfg.language);
     cfg.language = lang.code().to_string();
+}
+
+fn truncate_secs(t: NaiveTime) -> NaiveTime {
+    use chrono::Timelike;
+    t.with_second(0)
+        .unwrap_or(t)
+        .with_nanosecond(0)
+        .unwrap_or(t)
+}
+
+fn json_num(v: &serde_json::Value) -> Option<f64> {
+    if let Some(f) = v.as_f64() {
+        return Some(f);
+    }
+    v.as_str()
+        .map(|s| s.trim().replace(',', "."))
+        .and_then(|s| s.parse::<f64>().ok())
 }
 
 fn from_value_merged(v: &serde_json::Value) -> Config {
@@ -126,17 +144,17 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
             cfg.dark_at = t;
         }
     }
-    if let Some(f) = v.get("lat").and_then(|x| x.as_f64()) {
+    if let Some(f) = v.get("lat").and_then(json_num) {
         cfg.lat = Some(f);
     }
-    if let Some(f) = v.get("lon").and_then(|x| x.as_f64()) {
+    if let Some(f) = v.get("lon").and_then(json_num) {
         cfg.lon = Some(f);
     }
     if let Some(n) = v.get("light_offset_min").and_then(|x| x.as_i64()) {
-        cfg.light_offset_min = (n as i32).clamp(-180, 180);
+        cfg.light_offset_min = n.clamp(-180, 180) as i32;
     }
     if let Some(n) = v.get("dark_offset_min").and_then(|x| x.as_i64()) {
-        cfg.dark_offset_min = (n as i32).clamp(-180, 180);
+        cfg.dark_offset_min = n.clamp(-180, 180) as i32;
     }
     if let Some(b) = v.get("change_apps").and_then(|x| x.as_bool()) {
         cfg.change_apps = b;
@@ -168,6 +186,9 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     if let Some(s) = v.get("language").and_then(|x| x.as_str()) {
         cfg.language = s.trim().to_string();
     }
+    if let Some(b) = v.get("close_hint_acked").and_then(|x| x.as_bool()) {
+        cfg.close_hint_acked = b;
+    }
     sanitize(&mut cfg);
     cfg
 }
@@ -197,7 +218,7 @@ impl Config {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             return from_value_merged(&v);
         }
-        let bak = path.with_extension("json.corrupt.bak");
+        let bak = unique_backup(&path);
         let _ = std::fs::rename(&path, &bak);
         Self::default()
     }
@@ -248,7 +269,6 @@ mod tests {
         let c = from_value_merged(&v);
         assert_eq!(c.light_wallpaper, "C:\\a.jpg");
         assert_eq!(c.dark_wallpaper, "C:\\b.png");
-        // Old configs without the fields still load.
         let old: Config = serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
         assert_eq!(old.light_wallpaper, "");
         assert_eq!(old.dark_wallpaper, "");
@@ -299,12 +319,10 @@ mod tests {
 
     #[test]
     fn none_means_unset_but_zero_is_valid() {
-        // Unset stays unset.
         let mut c = Config::default();
         sanitize(&mut c);
         assert_eq!(c.lat, None);
         assert_eq!(c.lon, None);
-        // Explicit 0,0 (Gulf of Guinea) survives sanitize.
         let mut c = Config {
             lat: Some(0.0),
             lon: Some(0.0),
@@ -313,7 +331,6 @@ mod tests {
         sanitize(&mut c);
         assert_eq!(c.lat, Some(0.0));
         assert_eq!(c.lon, Some(0.0));
-        // Non-finite becomes unset, not 0.0.
         let mut c = Config {
             lat: Some(f64::NAN),
             lon: Some(f64::INFINITY),
@@ -322,5 +339,24 @@ mod tests {
         sanitize(&mut c);
         assert_eq!(c.lat, None);
         assert_eq!(c.lon, None);
+    }
+
+    #[test]
+    fn string_coords_and_huge_offsets() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"lat":"55,75","lon":"37.61"}"#).unwrap();
+        let c = from_value_merged(&v);
+        assert!((c.lat.unwrap() - 55.75).abs() < 1e-9);
+        assert!((c.lon.unwrap() - 37.61).abs() < 1e-9);
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"light_offset_min":9999999999}"#).unwrap();
+        assert_eq!(from_value_merged(&v).light_offset_min, 180);
+    }
+
+    #[test]
+    fn seconds_truncate_on_sanitize() {
+        let v: serde_json::Value = serde_json::from_str(r#"{"light_at":"07:00:45"}"#).unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.light_at.format("%H:%M:%S").to_string(), "07:00:00");
     }
 }

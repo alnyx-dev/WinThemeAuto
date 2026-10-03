@@ -1,20 +1,9 @@
-//! Accent-color sync: a custom Windows accent per light/dark mode.
-//!
-//! Primary path is the same one Settings uses: uxtheme's
-//! `SetUserColorPreference` (ordinal 122), which writes `AccentColor`,
-//! `AccentColorMenu`/`StartColorMenu` and a proper `AccentPalette`,
-//! then commits the change. If that entry point is missing (older or
-//! stripped builds), fall back to direct registry writes with a flat
-//! palette, plus a settings broadcast.
-
 use anyhow::{bail, Context, Result};
 use winreg::{enums::*, RegKey, RegValue};
 
 const EXPLORER_ACCENT: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent";
 const DWM_KEY: &str = r"Software\Microsoft\Windows\DWM";
 
-/// Mirrors uxtheme's `IMMERSIVE_COLOR_PREFERENCE`; `color2` is the accent
-/// as a COLORREF (`0x00BBGGRR`).
 #[repr(C)]
 struct ImmersiveColorPreference {
     color_set: u32,
@@ -25,7 +14,6 @@ struct ImmersiveColorPreference {
 type GetColorPreference = unsafe extern "system" fn(*mut ImmersiveColorPreference, i32) -> i32;
 type SetColorPreference = unsafe extern "system" fn(*const ImmersiveColorPreference, i32) -> i32;
 
-/// Parse `#RRGGBB` / `RRGGBB` into a COLORREF (`0x00BBGGRR`).
 pub fn parse_hex(s: &str) -> Option<u32> {
     let s = s.trim();
     let s = s.strip_prefix('#').unwrap_or(s);
@@ -37,18 +25,11 @@ pub fn parse_hex(s: &str) -> Option<u32> {
     Some((b << 16) | (g << 8) | r)
 }
 
-/// COLORREF (`0x00BBGGRR`) → registry DWORD (`0xFFRRGGBB`, opaque).
 pub fn to_dword(color: u32) -> u32 {
     let (r, g, b) = (color & 0xFF, (color >> 8) & 0xFF, (color >> 16) & 0xFF);
     0xFF00_0000 | (r << 16) | (g << 8) | b
 }
 
-/// Shaded 8-entry fallback palette: `[R,G,B,0x00]` × 8, dark → base → light.
-///
-/// Entry 4 is the base color; 0-3 mix toward black, 5-7 toward white.
-/// Matches the shape Windows Settings writes via `SetUserColorPreference` —
-/// a flat palette (all entries identical) renders as a dirty solid on
-/// taskbar/start in the fallback path.
 pub fn shaded_palette(color: u32) -> [u8; 32] {
     let (r, g, b) = (
         (color & 0xFF) as f32,
@@ -75,7 +56,6 @@ pub fn shaded_palette(color: u32) -> [u8; 32] {
     out
 }
 
-/// Apply an accent COLORREF for the current theme mode.
 pub fn apply(color: u32) -> Result<()> {
     if system_api(color)? {
         return Ok(());
@@ -83,19 +63,15 @@ pub fn apply(color: u32) -> Result<()> {
     fallback_registry(color)
 }
 
-/// The Settings path: read the current preference block, swap the accent,
-/// commit. Returns `Ok(false)` when the entry point is unavailable.
 fn system_api(color: u32) -> Result<bool> {
     use windows_sys::Win32::Foundation::{FreeLibrary, S_OK};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
     let name: Vec<u16> = "uxtheme.dll\0".encode_utf16().collect();
-    // SAFETY: plain system DLL load by name.
     let lib = unsafe { LoadLibraryW(name.as_ptr()) };
     if lib.is_null() {
         return Ok(false);
     }
-    // SAFETY: `lib` is valid until freed below; ordinals/names are correct.
     let result = unsafe {
         let get: Option<GetColorPreference> = std::mem::transmute(GetProcAddress(
             lib,
@@ -128,7 +104,6 @@ fn system_api(color: u32) -> Result<bool> {
     Ok(true)
 }
 
-/// Direct registry writes for when the system API is unavailable.
 fn fallback_registry(color: u32) -> Result<()> {
     let dword = to_dword(color);
     let (dwm, _) = RegKey::predef(HKEY_CURRENT_USER)
@@ -167,7 +142,6 @@ mod tests {
 
     #[test]
     fn dword_matches_known_registry_values() {
-        // Red #FF0000 -> 0xFFFF0000; default blue #0078D4 -> 0xFF0078D4.
         assert_eq!(to_dword(0x000000FF), 0xFFFF0000);
         assert_eq!(to_dword(0x00D47800), 0xFF0078D4);
     }
@@ -177,14 +151,11 @@ mod tests {
         let p = shaded_palette(0x00D47800);
         assert_eq!(p.len(), 32);
         let chunks = p.as_chunks::<4>().0;
-        // Entry 4 is the base color 0xD47800 -> [0x00, 0x78, 0xD4, 0x00].
         assert_eq!(&chunks[4], &[0x00, 0x78, 0xD4, 0x00]);
-        // Darker before, lighter after — not flat.
         let lum = |e: &[u8; 4]| e[0] as u32 + e[1] as u32 + e[2] as u32;
         assert!(lum(&chunks[0]) < lum(&chunks[4]), "first should be darker");
         assert!(lum(&chunks[7]) > lum(&chunks[4]), "last should be lighter");
         assert!(chunks.iter().any(|e| e != &[0x00, 0x78, 0xD4, 0x00]));
-        // Alpha byte stays 0x00.
         assert!(chunks.iter().all(|e| e[3] == 0x00));
     }
 }

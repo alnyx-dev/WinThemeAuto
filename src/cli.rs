@@ -1,27 +1,14 @@
-//! Headless command-line actions for scripts, hotkeys and automation.
-//!
-//! The GUI remains the default (no args, or `--tray` for autostart).
-//! Any action flag takes precedence and runs without a window:
-//! `--toggle`, `--light`, `--dark`, `--status`, `--help`.
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// Launch the GUI. `start_hidden` = `--tray`.
-    Ui {
-        start_hidden: bool,
-    },
+    Ui { start_hidden: bool },
     Toggle,
     Light,
     Dark,
     Status,
     Help,
-    /// Unknown flag; the string names it for the error message.
     Invalid,
 }
 
-/// Parse `std::env::args()` (including argv[0]).
-/// Unknown `--flags` map to [`Action::Invalid`]; positional args are ignored
-/// so file associations / launchers never break the GUI.
 pub fn parse(args: impl IntoIterator<Item = String>) -> Action {
     let mut start_hidden = false;
     let mut action: Option<Action> = None;
@@ -56,7 +43,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Action {
 }
 
 pub const HELP: &str = "\
-WinThemeAuto — light/dark theme switcher
+WinThemeAuto вЂ” light/dark theme switcher
 
 Usage:
   WinThemeAuto.exe [options]
@@ -105,7 +92,6 @@ mod tests {
     fn first_action_wins_and_unknown_is_invalid() {
         assert_eq!(args(&["exe", "--light", "--dark"]), Action::Light);
         assert_eq!(args(&["exe", "--nope"]), Action::Invalid);
-        // Positional args are ignored.
         assert_eq!(
             args(&["exe", "somefile.txt"]),
             Action::Ui {

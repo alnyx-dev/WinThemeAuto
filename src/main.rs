@@ -20,7 +20,7 @@ use i18n::Lang;
 use slint::{
     CloseRequestResponse, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel,
 };
-use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 use theme::Theme;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
@@ -30,6 +30,8 @@ struct State {
     cfg: Config,
     themes: Vec<themes::ThemeEntry>,
     last_scheduled: Option<Theme>,
+    manual_hold: Option<Theme>,
+    update_cancel: Arc<std::sync::atomic::AtomicBool>,
     last_titlebar_sys: Option<Theme>,
     last_wallpaper: Option<PathBuf>,
     last_accent: Option<u32>,
@@ -59,9 +61,6 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-/// Release builds are `windows_subsystem = "windows"` (no console).
-/// Attach to the parent console so `--status`/`--help` output is visible
-/// from cmd/PowerShell and scripts. Silent when there is no console.
 fn attach_console() {
     use windows_sys::Win32::System::Console::AttachConsole;
     const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
@@ -70,10 +69,8 @@ fn attach_console() {
     }
 }
 
-/// Headless switch: `target = None` means toggle. Used by `--toggle`,
-/// `--light`, `--dark` — no window, no tray, no mutex; writes the registry
-/// directly so it also works while the GUI instance is running.
 fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
+    attach_console();
     let cfg = Config::load();
     if !cfg.change_apps && !cfg.change_system {
         eprintln!("Nothing to switch: enable Apps or System in the app first");
@@ -108,13 +105,26 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
             None => eprintln!("Accent: invalid hex {hex}"),
         }
     }
-    attach_console();
     println!("{}", if want == Theme::Dark { "dark" } else { "light" });
+    if cfg.auto_enabled {
+        if let Some(scheduled) = schedule::desired_theme(&cfg, Local::now()) {
+            if scheduled != want {
+                eprintln!(
+                    "Note: auto-switch is on and wants {} вЂ” the GUI will revert this shortly. Use the window/tray Switch for a hold until the next switch.",
+                    if scheduled == Theme::Dark {
+                        "dark"
+                    } else {
+                        "light"
+                    }
+                );
+            }
+        }
+    }
     Ok(())
 }
 
-/// Headless status for scripts: `Light now • Next: dark at 19:00 (in 7 h)`.
 fn run_status() -> anyhow::Result<()> {
+    attach_console();
     let cfg = Config::load();
     let lang = Lang::from_code(&cfg.language);
     let s = i18n::ui(lang);
@@ -127,24 +137,28 @@ fn run_status() -> anyhow::Result<()> {
     } else {
         s.light_now
     };
-    attach_console();
     if next.is_empty() {
         println!("{head}");
     } else {
-        println!("{head} • {next}");
+        println!("{head} вЂў {next}");
     }
     Ok(())
 }
 
 fn run_ui(start_hidden: bool) -> anyhow::Result<()> {
-    // Held for the whole process lifetime. `None` means either another
-    // instance is running or the mutex itself failed — step aside only
-    // when the running window is actually found.
-    let guard = single_instance::Guard::acquire().ok().flatten();
-    if guard.is_none() && single_instance::focus_existing() {
-        return Ok(());
-    }
-    let _guard = guard;
+    let _guard = match single_instance::Guard::acquire() {
+        Ok(Some(g)) => g,
+        Ok(None) => {
+            single_instance::focus_existing();
+            return Ok(());
+        }
+        Err(e) => {
+            show_fatal(&format!(
+                "WinThemeAuto: single-instance guard failed: {e:#}"
+            ));
+            return Err(e);
+        }
+    };
     if let Err(e) = run_loop(start_hidden) {
         show_fatal(&format!("WinThemeAuto: {e:#}"));
         return Err(e);
@@ -175,6 +189,8 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         cfg: Config::load(),
         themes: themes::enumerate(),
         last_scheduled: None,
+        manual_hold: None,
+        update_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         last_titlebar_sys: None,
         last_wallpaper: None,
         last_accent: None,
@@ -183,12 +199,70 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
     }));
 
     let ui = MainWindow::new()?;
-    let tray: Rc<tray::Tray> = Rc::new(tray::create()?);
+    let tray: Rc<tray::Tray> = Rc::new({
+        let cfg = state.borrow().cfg.clone();
+        let lang = Lang::from_code(&cfg.language);
+        let s = i18n::ui(lang);
+        let (apps_theme, sys_theme) = theme::current_pair();
+        let shown = theme::display_theme(apps_theme, sys_theme, cfg.change_apps, cfg.change_system);
+        tray::create(
+            &tray::TrayText {
+                tooltip: "WinThemeAuto",
+                open: s.tray_open,
+                switch_to_light: s.to_light,
+                switch_to_dark: s.to_dark,
+                quit: s.tray_exit,
+            },
+            shown == Theme::Dark,
+        )?
+    });
     load_into_ui(&ui, &state.borrow().cfg, &state.borrow().themes);
     tick(&ui, &state, &tray);
 
-    ui.window()
-        .on_close_requested(|| CloseRequestResponse::HideWindow);
+    {
+        let w = ui.as_weak();
+        let s = state.clone();
+        ui.window().on_close_requested(move || {
+            if s.borrow().cfg.close_hint_acked {
+                return CloseRequestResponse::HideWindow;
+            }
+            if let Some(ui) = w.upgrade() {
+                ui.set_close_never_ask(false);
+                ui.set_show_close_dialog(true);
+            }
+            CloseRequestResponse::KeepWindowShown
+        });
+    }
+    {
+        let w = ui.as_weak();
+        let s = state.clone();
+        ui.on_close_minimize(move || {
+            if let Some(ui) = w.upgrade() {
+                if ui.get_close_never_ask() {
+                    let mut st = s.borrow_mut();
+                    st.cfg.close_hint_acked = true;
+                    let _ = st.cfg.save();
+                }
+                ui.set_show_close_dialog(false);
+                let _ = ui.hide();
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        let s = state.clone();
+        ui.on_close_quit(move || {
+            if let Some(ui) = w.upgrade() {
+                if ui.get_close_never_ask() {
+                    let mut st = s.borrow_mut();
+                    st.cfg.close_hint_acked = true;
+                    let _ = st.cfg.save();
+                }
+                ui.set_show_close_dialog(false);
+            }
+            let _ = slint::quit_event_loop();
+        });
+    }
 
     {
         let (w, s, t) = (ui.as_weak(), state.clone(), tray.clone());
@@ -199,10 +273,34 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         });
     }
     {
-        let (w, s, t) = (ui.as_weak(), state.clone(), tray.clone());
+        let w = ui.as_weak();
         ui.on_settings_changed(move || {
             if let Some(ui) = w.upgrade() {
+                ui.set_dirty(true);
+            }
+        });
+    }
+    {
+        let (w, s, t) = (ui.as_weak(), state.clone(), tray.clone());
+        ui.on_apply_settings(move || {
+            if let Some(ui) = w.upgrade() {
                 apply_settings(&ui, &s, &t);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_language_changed(move || {
+            if let Some(ui) = w.upgrade() {
+                apply_language_instant(&ui, &s);
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        ui.on_autostart_changed(move || {
+            if let Some(ui) = w.upgrade() {
+                apply_autostart_instant(&ui);
             }
         });
     }
@@ -216,19 +314,46 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         });
     }
     {
-        let w = ui.as_weak();
+        let (w, s) = (ui.as_weak(), state.clone());
         ui.on_browse_light_wallpaper(move || {
             if let Some(ui) = w.upgrade() {
-                browse_wallpaper(&ui, true);
+                let lang = Lang::from_code(&s.borrow().cfg.language);
+                browse_wallpaper(&ui, true, lang);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_browse_dark_wallpaper(move || {
+            if let Some(ui) = w.upgrade() {
+                let lang = Lang::from_code(&s.borrow().cfg.language);
+                browse_wallpaper(&ui, false, lang);
             }
         });
     }
     {
         let w = ui.as_weak();
-        ui.on_browse_dark_wallpaper(move || {
+        ui.on_clear_light_wallpaper(move || {
             if let Some(ui) = w.upgrade() {
-                browse_wallpaper(&ui, false);
+                ui.set_light_wallpaper("".into());
+                ui.set_dirty(true);
+                refresh_wallpaper_preview(&ui, true);
             }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        ui.on_clear_dark_wallpaper(move || {
+            if let Some(ui) = w.upgrade() {
+                ui.set_dark_wallpaper("".into());
+                ui.set_dirty(true);
+                refresh_wallpaper_preview(&ui, false);
+            }
+        });
+    }
+    {
+        ui.on_open_releases(move || {
+            update::open_releases_page();
         });
     }
     {
@@ -236,8 +361,17 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         ui.on_check_updates(move || {
             if let Some(ui) = w.upgrade() {
                 let lang = Lang::from_code(&s.borrow().cfg.language);
-                check_updates(&ui, lang);
+                let cancel = s.borrow().update_cancel.clone();
+                check_updates(&ui, lang, cancel);
             }
+        });
+    }
+    {
+        let s = state.clone();
+        ui.on_cancel_update(move || {
+            s.borrow()
+                .update_cancel
+                .store(true, std::sync::atomic::Ordering::SeqCst);
         });
     }
     {
@@ -334,7 +468,6 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::ThemeEntry]) {
     ui.set_mode_index(if cfg.mode == Mode::Sun { 1 } else { 0 });
     ui.set_light_at(cfg.light_at.format("%H:%M").to_string().into());
     ui.set_dark_at(cfg.dark_at.format("%H:%M").to_string().into());
-    // `None` = never set (empty field); `Some(0.0)` is shown as "0".
     if let Some(lat) = cfg.lat {
         ui.set_lat(lat.to_string().into());
     }
@@ -365,9 +498,13 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::ThemeEntry]) {
     ui.set_accent_enabled(cfg.accent_enabled);
     ui.set_light_accent(cfg.light_accent.clone().into());
     ui.set_dark_accent(cfg.dark_accent.clone().into());
+    ui.set_dirty(false);
+    ui.set_show_close_dialog(false);
+    ui.set_close_never_ask(false);
+    refresh_wallpaper_preview(ui, true);
+    refresh_wallpaper_preview(ui, false);
 }
 
-/// Push all static UI labels for `lang` into the Slint `t_*` properties.
 fn apply_lang(ui: &MainWindow, lang: Lang) {
     let s = i18n::ui(lang);
     ui.set_t_tab_auto(s.tab_auto.into());
@@ -403,9 +540,58 @@ fn apply_lang(ui: &MainWindow, lang: Lang) {
     ui.set_t_light_now(s.light_now.into());
     ui.set_t_dark_now(s.dark_now.into());
     ui.set_t_language(s.language.into());
+    ui.set_t_releases(s.releases.into());
+    ui.set_t_onboard(s.onboard.into());
+    ui.set_t_cancel(s.cancel.into());
+    ui.set_t_close_title(s.close_title.into());
+    ui.set_t_close_body(s.close_body.into());
+    ui.set_t_close_minimize(s.close_minimize.into());
+    ui.set_t_close_quit(s.close_quit.into());
+    ui.set_t_close_never(s.close_never.into());
 }
 
-/// ComboBox index for a stored theme path (0 = flags only).
+fn update_lang_ui(ui: &MainWindow, state: &Shared, lang: Lang) {
+    apply_lang(ui, lang);
+    ui.set_lang_index(lang.index());
+    ui.set_update_info("".into());
+    ui.set_geo_hint("".into());
+    let st = state.borrow();
+    let names: Vec<SharedString> =
+        std::iter::once(SharedString::from(i18n::ui(lang).system_default))
+            .chain(st.themes.iter().map(|t| themes::display_name(t).into()))
+            .collect();
+    ui.set_light_themes(ModelRc::new(VecModel::from(names.clone())));
+    ui.set_dark_themes(ModelRc::new(VecModel::from(names)));
+}
+
+fn apply_language_instant(ui: &MainWindow, state: &Shared) {
+    let lang = Lang::from_index(ui.get_lang_index());
+    {
+        let mut st = state.borrow_mut();
+        if Lang::from_code(&st.cfg.language) == lang {
+        } else {
+            let mut next = st.cfg.clone();
+            next.language = lang.code().to_string();
+            if let Err(e) = next.save() {
+                ui.set_lang_index(Lang::from_code(&st.cfg.language).index());
+                ui.set_status(i18n::msg(lang, "save_fail", &e.to_string()).into());
+                return;
+            }
+            st.cfg = next;
+        }
+    }
+    update_lang_ui(ui, state, lang);
+}
+
+fn apply_autostart_instant(ui: &MainWindow) {
+    let want = ui.get_autostart();
+    if let Err(e) = autostart::set(want) {
+        ui.set_autostart(autostart::is_enabled());
+        let lang = Lang::from_index(ui.get_lang_index());
+        ui.set_status(i18n::msg(lang, "autostart_fail", &e.to_string()).into());
+    }
+}
+
 fn theme_index(themes: &[themes::ThemeEntry], path: &str) -> i32 {
     if path.is_empty() {
         return 0;
@@ -417,7 +603,6 @@ fn theme_index(themes: &[themes::ThemeEntry], path: &str) -> i32 {
         .unwrap_or(0)
 }
 
-/// Theme path for a ComboBox index ("" = flags only).
 fn theme_path(themes: &[themes::ThemeEntry], index: i32) -> String {
     if index <= 0 {
         return String::new();
@@ -428,9 +613,6 @@ fn theme_path(themes: &[themes::ThemeEntry], index: i32) -> String {
         .unwrap_or_default()
 }
 
-/// Re-scan installed `.theme` files and refresh both ComboBoxes,
-/// preserving the current UI selection by path. Runs on every visit to
-/// the Appearance tab and via the Rescan button — no restart needed.
 fn refresh_themes(ui: &MainWindow, state: &Shared) {
     let (light_path, dark_path) = {
         let st = state.borrow();
@@ -444,7 +626,6 @@ fn refresh_themes(ui: &MainWindow, state: &Shared) {
     let dark_idx = theme_index(&fresh, &dark_path);
     {
         state.borrow_mut().themes = fresh;
-        // Borrow ends before UI updates below.
     }
     let st = state.borrow();
     let lang = Lang::from_code(&st.cfg.language);
@@ -469,9 +650,17 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         let lang = Lang::from_code(&st.cfg.language);
 
         if st.cfg.auto_enabled {
-            // `None` = Sun mode without location — nothing to switch to.
             if let Some(want) = schedule::desired_theme(&st.cfg, now) {
-                if st.last_scheduled != Some(want) {
+                if let Some(held) = st.manual_hold {
+                    if want == held {
+                        st.manual_hold = None;
+                        ui.set_status("".into());
+                    } else {
+                        st.last_scheduled = Some(want);
+                    }
+                }
+                let holding = st.manual_hold.is_some() && Some(want) != st.manual_hold;
+                if !holding {
                     let need = (st.cfg.change_apps && apps_theme != want)
                         || (st.cfg.change_system && sys_theme != want);
                     if need {
@@ -486,10 +675,14 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                     } else {
                         st.last_scheduled = Some(want);
                     }
+                    apply_wallpaper(ui, &mut st, want);
+                    apply_accent(ui, &mut st, want);
                 }
-                apply_wallpaper(ui, &mut st, want);
-                apply_accent(ui, &mut st, want);
+            } else {
+                st.manual_hold = None;
             }
+        } else {
+            st.manual_hold = None;
         }
 
         let info = if st.cfg.mode == Mode::Sun {
@@ -501,11 +694,6 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         ui.set_sun_info(info.into());
         ui.set_next_switch(next.clone().into());
 
-        if st.last_titlebar_sys != Some(sys_theme) {
-            st.last_titlebar_sys = Some(sys_theme);
-            force_light_titlebar(ui);
-        }
-
         let shown = theme::display_theme(
             apps_theme,
             sys_theme,
@@ -515,14 +703,17 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         let is_dark = shown == Theme::Dark;
         ui.set_is_dark(is_dark);
 
-        // Live tray: tooltip + toggle label follow the theme. Cached so the
-        // OS only hears about actual changes, not every 5 s tick.
+        if st.last_titlebar_sys != Some(sys_theme) {
+            st.last_titlebar_sys = Some(sys_theme);
+            force_light_titlebar(ui);
+        }
+
         let s = i18n::ui(lang);
         let head = if is_dark { s.dark_now } else { s.light_now };
         let tooltip = if next.is_empty() {
-            format!("WinThemeAuto — {head}")
+            format!("WinThemeAuto вЂ” {head}")
         } else {
-            format!("WinThemeAuto — {head} • {next}")
+            format!("WinThemeAuto вЂ” {head} вЂў {next}")
         };
         if st.last_tray_tooltip.as_ref() != Some(&tooltip) || st.last_tray_dark != Some(is_dark) {
             st.last_tray_tooltip = Some(tooltip.clone());
@@ -532,16 +723,16 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                 is_dark,
                 &tray::TrayText {
                     tooltip: &tooltip,
+                    open: s.tray_open,
                     switch_to_light: s.to_light,
                     switch_to_dark: s.to_dark,
+                    quit: s.tray_exit,
                 },
             );
         }
     }
 }
 
-/// Apply the accent color for `want` when sync is enabled.
-/// Skips redundant writes via `last_accent`.
 fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
     if !st.cfg.accent_enabled {
         return;
@@ -551,8 +742,6 @@ fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
     } else {
         st.cfg.dark_accent.clone()
     };
-    // Validated on Apply; stay silent here so a hand-edited config
-    // never spams the status line every 5 seconds.
     let Some(color) = accent::parse_hex(&hex) else {
         return;
     };
@@ -568,9 +757,6 @@ fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
     }
 }
 
-/// Swap the wallpaper for `want`, if any. A custom wallpaper path wins
-/// over the full-theme wallpaper; silent when unconfigured, missing
-/// or already applied.
 fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
     let Some(path) = resolve_wallpaper_path(&st.cfg, &st.themes, want) else {
         return;
@@ -590,8 +776,6 @@ fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
     }
 }
 
-/// Wallpaper file for `want`, if configured. A custom path wins over the
-/// full-theme wallpaper; `None` = flags-only mode, nothing to swap.
 fn resolve_wallpaper_path(
     cfg: &Config,
     themes: &[themes::ThemeEntry],
@@ -620,12 +804,13 @@ fn resolve_wallpaper_path(
 }
 
 fn toggle(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
-    let (apps, system, lang) = {
+    let (apps, system, lang, auto_enabled) = {
         let st = state.borrow();
         (
             st.cfg.change_apps,
             st.cfg.change_system,
             Lang::from_code(&st.cfg.language),
+            st.cfg.auto_enabled,
         )
     };
     if !apps && !system {
@@ -635,10 +820,34 @@ fn toggle(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
     let new = theme::effective_current(apps, system).toggled();
     match theme::apply(new, apps, system) {
         Ok(()) => {
-            ui.set_status("".into());
             ui.set_is_dark(new == Theme::Dark);
             apply_wallpaper(ui, &mut state.borrow_mut(), new);
             apply_accent(ui, &mut state.borrow_mut(), new);
+            if auto_enabled {
+                let want = {
+                    let st = state.borrow();
+                    schedule::desired_theme(&st.cfg, Local::now())
+                };
+                match want {
+                    Some(w) if w != new => {
+                        state.borrow_mut().manual_hold = Some(new);
+                        let next = schedule::next_switch_info(&state.borrow().cfg, Local::now());
+                        let text = if next.is_empty() {
+                            i18n::msg(lang, "held_plain", "")
+                        } else {
+                            i18n::msg(lang, "held", &next)
+                        };
+                        ui.set_status(text.into());
+                    }
+                    _ => {
+                        state.borrow_mut().manual_hold = None;
+                        ui.set_status("".into());
+                    }
+                }
+            } else {
+                state.borrow_mut().manual_hold = None;
+                ui.set_status("".into());
+            }
             tick(ui, state, tray);
         }
         Err(e) => {
@@ -662,6 +871,7 @@ fn detect_location(ui: &MainWindow, lang: Lang) {
                 Ok(loc) => {
                     ui.set_lat(loc.lat.to_string().into());
                     ui.set_lon(loc.lon.to_string().into());
+                    ui.set_dirty(true);
                     let place = if loc.place.is_empty() {
                         String::new()
                     } else {
@@ -678,17 +888,34 @@ fn detect_location(ui: &MainWindow, lang: Lang) {
     });
 }
 
-/// Native file picker for a custom wallpaper. Runs off the UI thread;
-/// fills the matching field on pick, stays silent on cancel.
-fn browse_wallpaper(ui: &MainWindow, light: bool) {
+fn refresh_wallpaper_preview(ui: &MainWindow, light: bool) {
+    let path = if light {
+        ui.get_light_wallpaper()
+    } else {
+        ui.get_dark_wallpaper()
+    };
+    let path = path.trim().to_string();
+    let has = !path.is_empty() && PathBuf::from(&path).is_file();
+    let img = if has {
+        slint::Image::load_from_path(std::path::Path::new(&path)).unwrap_or_default()
+    } else {
+        slint::Image::default()
+    };
+    if light {
+        ui.set_light_wp_preview(img);
+        ui.set_light_wp_has(has);
+    } else {
+        ui.set_dark_wp_preview(img);
+        ui.set_dark_wp_has(has);
+    }
+}
+
+fn browse_wallpaper(ui: &MainWindow, light: bool, lang: Lang) {
+    let title = i18n::msg(lang, if light { "pick_light" } else { "pick_dark" }, "");
     let weak = ui.as_weak();
     std::thread::spawn(move || {
         let picked = rfd::FileDialog::new()
-            .set_title(if light {
-                "Choose light-mode wallpaper"
-            } else {
-                "Choose dark-mode wallpaper"
-            })
+            .set_title(title)
             .add_filter("Images", &["jpg", "jpeg", "png", "bmp"])
             .pick_file();
 
@@ -700,15 +927,19 @@ fn browse_wallpaper(ui: &MainWindow, light: bool) {
                 } else {
                     ui.set_dark_wallpaper(s);
                 }
+                ui.set_dirty(true);
+                refresh_wallpaper_preview(&ui, light);
             }
         });
     });
 }
 
-fn check_updates(ui: &MainWindow, lang: Lang) {
+fn check_updates(ui: &MainWindow, lang: Lang, cancel: Arc<std::sync::atomic::AtomicBool>) {
+    use std::sync::atomic::Ordering;
     if ui.get_checking_update() {
         return;
     }
+    cancel.store(false, Ordering::SeqCst);
     ui.set_checking_update(true);
     ui.set_update_info(i18n::msg(lang, "checking_updates", "").into());
     ui.set_update_ok(false);
@@ -739,11 +970,45 @@ fn check_updates(ui: &MainWindow, lang: Lang) {
             return;
         }
 
-        set(&i18n::msg(lang, "found", &info.latest), false, false);
-        let new_exe = match update::download(&info) {
+        set(
+            &i18n::dl_progress(lang, &info.latest, 0, None),
+            false,
+            false,
+        );
+        let prog_weak = weak.clone();
+        let prog_state = std::sync::Mutex::new((std::time::Instant::now(), 0u64));
+        let latest = info.latest.clone();
+        let on_progress = move |done: u64, total: Option<u64>| {
+            let forward = {
+                let mut st = prog_state.lock().unwrap_or_else(|e| e.into_inner());
+                let msgs_pct = |d: u64, t: Option<u64>| match t {
+                    Some(t) if t > 0 => d * 100 / t,
+                    _ => u64::MAX,
+                };
+                let pct = msgs_pct(done, total);
+                if pct != msgs_pct(st.1, total) || st.0.elapsed().as_millis() > 500 {
+                    *st = (std::time::Instant::now(), done);
+                    true
+                } else {
+                    false
+                }
+            };
+            if forward {
+                let text = i18n::dl_progress(lang, &latest, done, total);
+                let _ = prog_weak.upgrade_in_event_loop(move |ui| {
+                    ui.set_update_info(text.into());
+                });
+            }
+        };
+        let new_exe = match update::download(&info, &cancel, on_progress) {
             Ok(p) => p,
             Err(e) => {
-                set(&i18n::msg(lang, "dl_fail", &e.to_string()), true, false);
+                let err = e.to_string();
+                if err.contains("cancelled by user") {
+                    set(&i18n::msg(lang, "cancelled", ""), true, false);
+                } else {
+                    set(&i18n::msg(lang, "dl_fail", &err), true, false);
+                }
                 return;
             }
         };
@@ -778,11 +1043,13 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
     let (Ok(light_at), Ok(dark_at)) = (parse_time(ui.get_light_at()), parse_time(ui.get_dark_at()))
     else {
         let lang = Lang::from_index(ui.get_lang_index());
+        ui.set_tab_index(0);
         ui.set_status(i18n::msg(lang, "bad_time", "").into());
         return;
     };
     if light_at == dark_at {
         let lang = Lang::from_index(ui.get_lang_index());
+        ui.set_tab_index(0);
         ui.set_status(i18n::msg(lang, "same_time", "").into());
         return;
     }
@@ -792,6 +1059,7 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         parse_off(ui.get_dark_offset()),
     ) else {
         let lang = Lang::from_index(ui.get_lang_index());
+        ui.set_tab_index(0);
         ui.set_status(i18n::msg(lang, "bad_offset", "").into());
         return;
     };
@@ -808,8 +1076,6 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
             theme_path(&st.themes, ui.get_dark_theme_index()),
         )
     };
-    // Empty field = unset (None); valid number = Some(v) — `Some(0.0)`
-    // is a real place (Gulf of Guinea). Garbage = parse failure.
     let parse_coord = |s: slint::SharedString, min: f64, max: f64| -> Option<Option<f64>> {
         let t = s.trim().replace(',', ".");
         if t.is_empty() {
@@ -829,17 +1095,22 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
             (Some(Some(la)), Some(Some(lo))) => (Some(la), Some(lo)),
             _ => {
                 let lang = Lang::from_index(ui.get_lang_index());
+                ui.set_tab_index(0);
                 ui.set_status(i18n::msg(lang, "bad_coords", "").into());
                 return;
             }
         },
         Mode::Fixed => {
-            // Lenient: garbage keeps the old value, empty clears to None.
-            let st = state.borrow();
-            (
-                lat_parsed.unwrap_or(st.cfg.lat),
-                lon_parsed.unwrap_or(st.cfg.lon),
-            )
+            let typed = |s: slint::SharedString| !s.trim().is_empty();
+            if (typed(ui.get_lat()) && lat_parsed.is_none())
+                || (typed(ui.get_lon()) && lon_parsed.is_none())
+            {
+                let lang = Lang::from_index(ui.get_lang_index());
+                ui.set_tab_index(0);
+                ui.set_status(i18n::msg(lang, "bad_coords", "").into());
+                return;
+            }
+            (lat_parsed.unwrap_or(None), lon_parsed.unwrap_or(None))
         }
     };
 
@@ -848,6 +1119,7 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
     let dark_wallpaper = ui.get_dark_wallpaper().trim().to_string();
     for (light, p) in [(true, &light_wallpaper), (false, &dark_wallpaper)] {
         if !p.is_empty() && !PathBuf::from(p).is_file() {
+            ui.set_tab_index(1);
             ui.set_status(i18n::wp_missing(lang, light, p).into());
             return;
         }
@@ -860,10 +1132,17 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         for (light, h) in [(true, &light_accent), (false, &dark_accent)] {
             if accent::parse_hex(h).is_none() {
                 let label = i18n::mode_word(lang, light);
+                ui.set_tab_index(1);
                 ui.set_status(i18n::msg(lang, "accent_hex", label).into());
                 return;
             }
         }
+    }
+
+    if ui.get_auto_enabled() && !ui.get_change_apps() && !ui.get_change_system() {
+        ui.set_tab_index(0);
+        ui.set_status(i18n::msg(lang, "need_target", "").into());
+        return;
     }
 
     let new_cfg = Config {
@@ -885,6 +1164,7 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         light_accent,
         dark_accent,
         language: lang.code().to_string(),
+        close_hint_acked: state.borrow().cfg.close_hint_acked,
     };
     if let Err(e) = new_cfg.save() {
         ui.set_status(i18n::msg(lang, "save_fail", &e.to_string()).into());
@@ -893,9 +1173,8 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
     {
         let mut st = state.borrow_mut();
         st.cfg = new_cfg;
-        // Force re-apply on next tick: otherwise a re-selected accent
-        // or wallpaper equal to the cached `last_*` value would be skipped.
         st.last_scheduled = None;
+        st.manual_hold = None;
         st.last_wallpaper = None;
         st.last_accent = None;
     }
@@ -906,19 +1185,24 @@ fn apply_settings(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         return;
     }
 
-    // Language applies instantly: labels + "(System default)" entry.
-    apply_lang(ui, lang);
-    ui.set_lang_index(lang.index());
-    {
-        let st = state.borrow();
-        let names: Vec<SharedString> =
-            std::iter::once(SharedString::from(i18n::ui(lang).system_default))
-                .chain(st.themes.iter().map(|t| themes::display_name(t).into()))
-                .collect();
-        ui.set_light_themes(ModelRc::new(VecModel::from(names.clone())));
-        ui.set_dark_themes(ModelRc::new(VecModel::from(names)));
+    let status_before = ui.get_status();
+    if !state.borrow().cfg.auto_enabled {
+        let cur = {
+            let st = state.borrow();
+            theme::effective_current(st.cfg.change_apps, st.cfg.change_system)
+        };
+        apply_wallpaper(ui, &mut state.borrow_mut(), cur);
+        apply_accent(ui, &mut state.borrow_mut(), cur);
     }
 
-    ui.set_status("".into());
+    update_lang_ui(ui, state, lang);
+
+    refresh_wallpaper_preview(ui, true);
+    refresh_wallpaper_preview(ui, false);
+
+    ui.set_dirty(false);
+    if ui.get_status().as_str() == status_before.as_str() {
+        ui.set_status("".into());
+    }
     tick(ui, state, tray);
 }
