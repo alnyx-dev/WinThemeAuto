@@ -324,6 +324,10 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 📜 Changelog
 
+### v0.2.1
+- 🎨 Brand icon everywhere: window, tray, exe file, readme and website
+- 🌐 Landing page with always-fresh download links
+
 ### v0.2.0
 - 🖼️ Full Windows themes: pick light/dark `.theme` from installed ones, wallpaper follows silently
 - 🛡️ Single-instance guard: second launch focuses the running window
