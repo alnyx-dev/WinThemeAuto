@@ -175,7 +175,7 @@ export component MainWindow inherits Window {
                             color: #0f172a;
                         }
                         Text {
-                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " вЂў " : root.t-light-now + " вЂў ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
+                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " • " : root.t-light-now + " • ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
                             font-size: 12px;
                             color: #64748b;
                             overflow: elide;
@@ -328,7 +328,7 @@ export component MainWindow inherits Window {
                             accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
                         Button {
-                            text: root.locating ? "вЂ¦" : root.t-detect;
+                            text: root.locating ? "…" : root.t-detect;
                             enabled: !root.locating;
                             min-width: 92px;
                             clicked => { root.detect-location(); }
@@ -359,7 +359,7 @@ export component MainWindow inherits Window {
                         }
                         LineEdit {
                             text <=> root.light-offset;
-                            placeholder-text: "-180вЂ¦180";
+                            placeholder-text: "-180…180";
                             horizontal-stretch: 1;
                             accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
@@ -371,7 +371,7 @@ export component MainWindow inherits Window {
                         }
                         LineEdit {
                             text <=> root.dark-offset;
-                            placeholder-text: "-180вЂ¦180";
+                            placeholder-text: "-180…180";
                             horizontal-stretch: 1;
                             accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                         }
@@ -482,11 +482,11 @@ export component MainWindow inherits Window {
                         accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     Button {
-                        text: "вЂ¦";
+                        text: "…";
                         clicked => { root.browse-light-wallpaper(); }
                     }
                     Button {
-                        text: "Г—";
+                        text: "×";
                         clicked => { root.clear-light-wallpaper(); }
                     }
                 }
@@ -513,11 +513,11 @@ export component MainWindow inherits Window {
                         accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
                     }
                     Button {
-                        text: "вЂ¦";
+                        text: "…";
                         clicked => { root.browse-dark-wallpaper(); }
                     }
                     Button {
-                        text: "Г—";
+                        text: "×";
                         clicked => { root.clear-dark-wallpaper(); }
                     }
                 }
@@ -688,7 +688,7 @@ export component MainWindow inherits Window {
             wrap: word-wrap;
         }
         Button {
-            text: root.dirty ? root.t-apply + " вЂў" : root.t-apply;
+            text: root.dirty ? root.t-apply + " •" : root.t-apply;
             primary: true;
             horizontal-stretch: 1;
             clicked => { root.apply-settings(); }

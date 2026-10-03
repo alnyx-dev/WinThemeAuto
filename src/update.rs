@@ -102,7 +102,7 @@ pub fn check() -> Result<UpdateInfo> {
     }
     let expected = expected.with_context(|| {
         format!(
-            "release {} has no checksum for {want} вЂ” download manually",
+            "release {} has no checksum for {want} — download manually",
             rel.tag_name
         )
     })?;
@@ -285,7 +285,7 @@ fn build_updater_script(
          del \"%~f0\"\r\n\
          goto :eof\r\n\
          :replace_failed\r\n\
-         rem Replace failed (locked file?) вЂ” run the new build from its temp\r\n\
+         rem Replace failed (locked file?) — run the new build from its temp\r\n\
          rem path instead of silently booting the stale exe; the next check\r\n\
          rem retries the replace.\r\n\
          {start_new}\r\n\

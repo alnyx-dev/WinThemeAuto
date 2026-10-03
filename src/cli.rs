@@ -43,7 +43,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Action {
 }
 
 pub const HELP: &str = "\
-WinThemeAuto вЂ” light/dark theme switcher
+WinThemeAuto — light/dark theme switcher
 
 Usage:
   WinThemeAuto.exe [options]

@@ -97,32 +97,32 @@ pub fn ui(lang: Lang) -> UiStrings {
             lat_ph: "Lat 55.75",
             lon_ph: "Lon 37.61",
             detect: "Detect",
-            light_pm: "Light В±min",
-            dark_pm: "Dark В±min",
+            light_pm: "Light ±min",
+            dark_pm: "Dark ±min",
             apply_to: "Apply to:",
             apps: "Apps",
             system: "System",
             light_label: "Light:",
             dark_label: "Dark:",
-            light_wp_ph: "Light wallpaper (optional)вЂ¦",
-            dark_wp_ph: "Dark wallpaper (optional)вЂ¦",
+            light_wp_ph: "Light wallpaper (optional)…",
+            dark_wp_ph: "Dark wallpaper (optional)…",
             wp_hint: "A custom path wins over the theme wallpaper. Empty = theme only.",
             accent_check: "Sync accent color with theme",
             accent_hint:
-                "Click a swatch to fill the field, then Apply вЂ” taskbar needs вЂњShow accent colorвЂќ on.",
+                "Click a swatch to fill the field, then Apply — taskbar needs “Show accent color” on.",
             rescan: "Rescan themes",
             autostart: "Start with Windows",
             check_updates: "Check for updates",
-            checking: "CheckingвЂ¦",
+            checking: "Checking…",
             apply: "Apply",
             to_light: "To light",
             to_dark: "To dark",
             light_now: "Light now",
             dark_now: "Dark now",
-            system_default: "(No theme file вЂ” flags only)",
+            system_default: "(No theme file — flags only)",
             language: "Language:",
             close_title: "Minimize to tray?",
-            close_body: "Closing the window keeps WinThemeAuto running in the tray (auto-switch stays on). To quit completely, use the tray menu в†’ Exit.",
+            close_body: "Closing the window keeps WinThemeAuto running in the tray (auto-switch stays on). To quit completely, use the tray menu → Exit.",
             close_minimize: "Minimize",
             close_quit: "Quit",
             close_never: "Don't ask again",
@@ -133,51 +133,51 @@ pub fn ui(lang: Lang) -> UiStrings {
             cancel: "Cancel",
         },
         Lang::Ru => UiStrings {
-            tab_auto: "РђРІС‚РѕРїРµСЂРµРєР»СЋС‡РµРЅРёРµ",
-            tab_appearance: "РћС„РѕСЂРјР»РµРЅРёРµ",
-            tab_settings: "РќР°СЃС‚СЂРѕР№РєРё",
-            auto_title: "РђРІС‚РѕРїРµСЂРµРєР»СЋС‡РµРЅРёРµ",
-            mode_time: "РџРѕ РІСЂРµРјРµРЅРё",
-            mode_sun: "Р’РѕСЃС…РѕРґ / Р·Р°РєР°С‚",
-            light_from: "РЎРІРµС‚Р»Р°СЏ СЃ",
-            dark_from: "РўС‘РјРЅР°СЏ СЃ",
-            lat_ph: "РЁРёСЂ. 55,75",
-            lon_ph: "Р”РѕР»Рі. 37,61",
-            detect: "РќР°Р№С‚Рё",
-            light_pm: "РЎРІРµС‚ В±РјРёРЅ",
-            dark_pm: "РўС‘РјРЅ. В±РјРёРЅ",
-            apply_to: "РџСЂРёРјРµРЅРёС‚СЊ Рє:",
-            apps: "РџСЂРёР»РѕР¶РµРЅРёСЏ",
-            system: "РЎРёСЃС‚РµРјР°",
-            light_label: "РЎРІРµС‚Р»Р°СЏ:",
-            dark_label: "РўС‘РјРЅР°СЏ:",
-            light_wp_ph: "РЎРІРµС‚Р»С‹Рµ РѕР±РѕРё (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ)вЂ¦",
-            dark_wp_ph: "РўС‘РјРЅС‹Рµ РѕР±РѕРё (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ)вЂ¦",
-            wp_hint: "РЎРІРѕР№ РїСѓС‚СЊ РІР°Р¶РЅРµРµ РѕР±РѕРµРІ С‚РµРјС‹. РџСѓСЃС‚Рѕ = С‚РѕР»СЊРєРѕ С‚РµРјР°.",
-            accent_check: "РђРєС†РµРЅС‚ РІ С†РІРµС‚ С‚РµРјС‹",
+            tab_auto: "Автопереключение",
+            tab_appearance: "Оформление",
+            tab_settings: "Настройки",
+            auto_title: "Автопереключение",
+            mode_time: "По времени",
+            mode_sun: "Восход / закат",
+            light_from: "Светлая с",
+            dark_from: "Тёмная с",
+            lat_ph: "Шир. 55,75",
+            lon_ph: "Долг. 37,61",
+            detect: "Найти",
+            light_pm: "Свет ±мин",
+            dark_pm: "Тёмн. ±мин",
+            apply_to: "Применить к:",
+            apps: "Приложения",
+            system: "Система",
+            light_label: "Светлая:",
+            dark_label: "Тёмная:",
+            light_wp_ph: "Светлые обои (необязательно)…",
+            dark_wp_ph: "Тёмные обои (необязательно)…",
+            wp_hint: "Свой путь важнее обоев темы. Пусто = только тема.",
+            accent_check: "Акцент в цвет темы",
             accent_hint:
-                "РљР»РёРє Р·Р°РїРѕР»РЅСЏРµС‚ РїРѕР»Рµ вЂ” РЅР°Р¶РјРёС‚Рµ РџСЂРёРјРµРЅРёС‚СЊ. Р”Р»СЏ РїР°РЅРµР»Рё РІРєР»СЋС‡РёС‚Рµ В«Р¦РІРµС‚ РІ РџСѓСЃРєРµ Рё РЅР° РїР°РЅРµР»РёВ».",
-            rescan: "РћР±РЅРѕРІРёС‚СЊ С‚РµРјС‹",
-            autostart: "Р—Р°РїСѓСЃРєР°С‚СЊ СЃ Windows",
-            check_updates: "РџСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ",
-            checking: "РџСЂРѕРІРµСЂРєР°вЂ¦",
-            apply: "РџСЂРёРјРµРЅРёС‚СЊ",
-            to_light: "Рљ СЃРІРµС‚Р»РѕР№",
-            to_dark: "Рљ С‚С‘РјРЅРѕР№",
-            light_now: "РЎРµР№С‡Р°СЃ СЃРІРµС‚Р»Р°СЏ",
-            dark_now: "РЎРµР№С‡Р°СЃ С‚С‘РјРЅР°СЏ",
-            system_default: "(Р‘РµР· С„Р°Р№Р»Р° С‚РµРјС‹ вЂ” С‚РѕР»СЊРєРѕ С„Р»Р°РіРё)",
-            language: "РЇР·С‹Рє:",
-            close_title: "РЎРІРµСЂРЅСѓС‚СЊ РІ С‚СЂРµР№?",
-            close_body: "Р—Р°РєСЂС‹С‚РёРµ РѕРєРЅР° РѕСЃС‚Р°РІР»СЏРµС‚ WinThemeAuto РІ С‚СЂРµРµ (Р°РІС‚РѕРїРµСЂРµРєР»СЋС‡РµРЅРёРµ СЂР°Р±РѕС‚Р°РµС‚). Р§С‚РѕР±С‹ РІС‹Р№С‚Рё РїРѕР»РЅРѕСЃС‚СЊСЋ: РјРµРЅСЋ С‚СЂРµСЏ в†’ Р’С‹С…РѕРґ.",
-            close_minimize: "РЎРІРµСЂРЅСѓС‚СЊ",
-            close_quit: "Р’С‹Р№С‚Рё",
-            close_never: "Р‘РѕР»СЊС€Рµ РЅРµ СЃРїСЂР°С€РёРІР°С‚СЊ",
-            tray_open: "РћС‚РєСЂС‹С‚СЊ",
-            tray_exit: "Р’С‹С…РѕРґ",
-            releases: "Р РµР»РёР·С‹",
-            onboard: "Р’РєР»СЋС‡РёС‚Рµ Р°РІС‚Рѕ, РІС‹Р±РµСЂРёС‚Рµ СЂРµР¶РёРј, РЅР°Р¶РјРёС‚Рµ РџСЂРёРјРµРЅРёС‚СЊ",
-            cancel: "РћС‚РјРµРЅР°",
+                "Клик заполняет поле — нажмите Применить. Для панели включите «Цвет в Пуске и на панели».",
+            rescan: "Обновить темы",
+            autostart: "Запускать с Windows",
+            check_updates: "Проверить обновления",
+            checking: "Проверка…",
+            apply: "Применить",
+            to_light: "К светлой",
+            to_dark: "К тёмной",
+            light_now: "Сейчас светлая",
+            dark_now: "Сейчас тёмная",
+            system_default: "(Без файла темы — только флаги)",
+            language: "Язык:",
+            close_title: "Свернуть в трей?",
+            close_body: "Закрытие окна оставляет WinThemeAuto в трее (автопереключение работает). Чтобы выйти полностью: меню трея → Выход.",
+            close_minimize: "Свернуть",
+            close_quit: "Выйти",
+            close_never: "Больше не спрашивать",
+            tray_open: "Открыть",
+            tray_exit: "Выход",
+            releases: "Релизы",
+            onboard: "Включите авто, выберите режим, нажмите Применить",
+            cancel: "Отмена",
         },
     }
 }
@@ -190,7 +190,7 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "bad_time" => "Time must be HH:MM, e.g. 07:30",
             "same_time" => "Light and dark times must differ",
             "bad_offset" => "Offset must be an integer from -180 to 180",
-            "bad_coords" => "Enter coordinates: latitude -90..90, longitude -180..180 вЂ” or click Detect, then Apply",
+            "bad_coords" => "Enter coordinates: latitude -90..90, longitude -180..180 — or click Detect, then Apply",
             "accent_hex" => "{p} accent must be hex RGB, e.g. 0078D4",
             "save_fail" => "Failed to save settings: {e}",
             "autostart_fail" => "Autostart: {e}",
@@ -199,59 +199,59 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "error" => "Error: {e}",
             "wallpaper" => "Wallpaper: {e}",
             "accent" => "Accent: {e}",
-            "locating" => "LocatingвЂ¦",
-            "geo_ok" => "Found via IP вЂ” {e}. Click Apply.",
+            "locating" => "Locating…",
+            "geo_ok" => "Found via IP — {e}. Click Apply.",
             "geo_fail" => "Location failed: {e}. Enter coordinates manually.",
-            "checking_updates" => "Checking for updatesвЂ¦",
+            "checking_updates" => "Checking for updates…",
             "latest" => "You have the latest version (v{e}).",
-            "found" => "Found v{e} вЂ” downloadingвЂ¦",
-            "installing" => "Installing v{e} вЂ” the app will restartвЂ¦",
+            "found" => "Found v{e} — downloading…",
+            "installing" => "Installing v{e} — the app will restart…",
             "check_fail" => "Update check failed: {e}",
             "dl_fail" => "Download failed: {e}",
             "install_fail" => "Install failed: {e}",
-            "theme_gone" => "Selected theme no longer installed вЂ” reset to no-theme (flags only)",
-            "need_target" => "Auto-switch needs Apps or System вЂ” enable at least one",
+            "theme_gone" => "Selected theme no longer installed — reset to no-theme (flags only)",
+            "need_target" => "Auto-switch needs Apps or System — enable at least one",
             "cancelled" => "Update cancelled.",
             "pick_light" => "Choose light-mode wallpaper",
             "pick_dark" => "Choose dark-mode wallpaper",
-            "held" => "Manual theme вЂ” auto resumes at the next switch ({e})",
-            "held_plain" => "Manual theme вЂ” auto paused until Apply",
+            "held" => "Manual theme — auto resumes at the next switch ({e})",
+            "held_plain" => "Manual theme — auto paused until Apply",
             "need_coords" => "Enter coordinates for sunrise/sunset",
-            "need_coords_short" => "Enter coordinatesвЂ¦",
+            "need_coords_short" => "Enter coordinates…",
             _ => "{e}",
         }),
         Lang::Ru => ru(match key {
-            "bad_time" => "Р’СЂРµРјСЏ РІ С„РѕСЂРјР°С‚Рµ Р§Р§:РњРњ, РЅР°РїСЂ. 07:30",
-            "same_time" => "Р’СЂРµРјСЏ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ РґРѕР»Р¶РЅС‹ СЂР°Р·Р»РёС‡Р°С‚СЊСЃСЏ",
-            "bad_offset" => "РЎРґРІРёРі вЂ” С†РµР»РѕРµ С‡РёСЃР»Рѕ РѕС‚ -180 РґРѕ 180",
-            "bad_coords" => "Р’РІРµРґРёС‚Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹: С€РёСЂРѕС‚Р° -90..90, РґРѕР»РіРѕС‚Р° -180..180 вЂ” РёР»Рё РЅР°Р¶РјРёС‚Рµ РќР°Р№С‚Рё, Р·Р°С‚РµРј РџСЂРёРјРµРЅРёС‚СЊ",
-            "accent_hex" => "РђРєС†РµРЅС‚ {p} вЂ” hex RGB, РЅР°РїСЂ. 0078D4",
-            "save_fail" => "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ: {e}",
-            "autostart_fail" => "РђРІС‚РѕР·Р°РїСѓСЃРє: {e}",
-            "nothing_toggle" => "РќРµС‡РµРіРѕ РїРµСЂРµРєР»СЋС‡Р°С‚СЊ: РІРєР»СЋС‡РёС‚Рµ РџСЂРёР»РѕР¶РµРЅРёСЏ РёР»Рё РЎРёСЃС‚РµРјСѓ",
-            "switch_fail" => "РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµРєР»СЋС‡РёС‚СЊ С‚РµРјСѓ: {e}",
-            "error" => "РћС€РёР±РєР°: {e}",
-            "wallpaper" => "РћР±РѕРё: {e}",
-            "accent" => "РђРєС†РµРЅС‚: {e}",
-            "locating" => "РћРїСЂРµРґРµР»РµРЅРёРµвЂ¦",
-            "geo_ok" => "РќР°Р№РґРµРЅРѕ РїРѕ IP вЂ” {e}. РќР°Р¶РјРёС‚Рµ РџСЂРёРјРµРЅРёС‚СЊ.",
-            "geo_fail" => "РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ: {e}. Р’РІРµРґРёС‚Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹ РІСЂСѓС‡РЅСѓСЋ.",
-            "checking_updates" => "РџСЂРѕРІРµСЂРєР° РѕР±РЅРѕРІР»РµРЅРёР№вЂ¦",
-            "latest" => "РЈ РІР°СЃ РїРѕСЃР»РµРґРЅСЏСЏ РІРµСЂСЃРёСЏ (v{e}).",
-            "found" => "РќР°Р№РґРµРЅР° v{e} вЂ” Р·Р°РіСЂСѓР·РєР°вЂ¦",
-            "installing" => "РЈСЃС‚Р°РЅРѕРІРєР° v{e} вЂ” РїРµСЂРµР·Р°РїСѓСЃРєвЂ¦",
-            "check_fail" => "РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё: {e}",
-            "dl_fail" => "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: {e}",
-            "install_fail" => "РћС€РёР±РєР° СѓСЃС‚Р°РЅРѕРІРєРё: {e}",
-            "theme_gone" => "Р’С‹Р±СЂР°РЅРЅР°СЏ С‚РµРјР° СѓРґР°Р»РµРЅР° вЂ” СЃР±СЂРѕС€РµРЅРѕ РЅР° В«Р±РµР· С‚РµРјС‹В» (С‚РѕР»СЊРєРѕ С„Р»Р°РіРё)",
-            "need_target" => "Р”Р»СЏ Р°РІС‚РѕРїРµСЂРµРєР»СЋС‡РµРЅРёСЏ РЅСѓР¶РЅС‹ РџСЂРёР»РѕР¶РµРЅРёСЏ РёР»Рё РЎРёСЃС‚РµРјР° вЂ” РІРєР»СЋС‡РёС‚Рµ С…РѕС‚СЊ РѕРґРЅРѕ",
-            "cancelled" => "РћР±РЅРѕРІР»РµРЅРёРµ РѕС‚РјРµРЅРµРЅРѕ.",
-            "pick_light" => "Р’С‹Р±РµСЂРёС‚Рµ РѕР±РѕРё СЃРІРµС‚Р»РѕРіРѕ СЂРµР¶РёРјР°",
-            "pick_dark" => "Р’С‹Р±РµСЂРёС‚Рµ РѕР±РѕРё С‚С‘РјРЅРѕРіРѕ СЂРµР¶РёРјР°",
-            "held" => "Р СѓС‡РЅР°СЏ С‚РµРјР° вЂ” Р°РІС‚Рѕ РІРѕР·РѕР±РЅРѕРІРёС‚СЃСЏ РЅР° СЃР»РµРґСѓСЋС‰РµРј РїРµСЂРµРєР»СЋС‡РµРЅРёРё ({e})",
-            "held_plain" => "Р СѓС‡РЅР°СЏ С‚РµРјР° вЂ” Р°РІС‚Рѕ РЅР° РїР°СѓР·Рµ РґРѕ В«РџСЂРёРјРµРЅРёС‚СЊВ»",
-            "need_coords" => "Р’РІРµРґРёС‚Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹ РґР»СЏ РІРѕСЃС…РѕРґР°/Р·Р°РєР°С‚Р°",
-            "need_coords_short" => "Р’РІРµРґРёС‚Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹вЂ¦",
+            "bad_time" => "Время в формате ЧЧ:ММ, напр. 07:30",
+            "same_time" => "Время светлой и тёмной должны различаться",
+            "bad_offset" => "Сдвиг — целое число от -180 до 180",
+            "bad_coords" => "Введите координаты: широта -90..90, долгота -180..180 — или нажмите Найти, затем Применить",
+            "accent_hex" => "Акцент {p} — hex RGB, напр. 0078D4",
+            "save_fail" => "Не удалось сохранить: {e}",
+            "autostart_fail" => "Автозапуск: {e}",
+            "nothing_toggle" => "Нечего переключать: включите Приложения или Систему",
+            "switch_fail" => "Не удалось переключить тему: {e}",
+            "error" => "Ошибка: {e}",
+            "wallpaper" => "Обои: {e}",
+            "accent" => "Акцент: {e}",
+            "locating" => "Определение…",
+            "geo_ok" => "Найдено по IP — {e}. Нажмите Применить.",
+            "geo_fail" => "Не удалось определить: {e}. Введите координаты вручную.",
+            "checking_updates" => "Проверка обновлений…",
+            "latest" => "У вас последняя версия (v{e}).",
+            "found" => "Найдена v{e} — загрузка…",
+            "installing" => "Установка v{e} — перезапуск…",
+            "check_fail" => "Ошибка проверки: {e}",
+            "dl_fail" => "Ошибка загрузки: {e}",
+            "install_fail" => "Ошибка установки: {e}",
+            "theme_gone" => "Выбранная тема удалена — сброшено на «без темы» (только флаги)",
+            "need_target" => "Для автопереключения нужны Приложения или Система — включите хоть одно",
+            "cancelled" => "Обновление отменено.",
+            "pick_light" => "Выберите обои светлого режима",
+            "pick_dark" => "Выберите обои тёмного режима",
+            "held" => "Ручная тема — авто возобновится на следующем переключении ({e})",
+            "held_plain" => "Ручная тема — авто на паузе до «Применить»",
+            "need_coords" => "Введите координаты для восхода/заката",
+            "need_coords_short" => "Введите координаты…",
             _ => "{e}",
         }),
     }
@@ -261,8 +261,8 @@ pub fn mode_word(lang: Lang, light: bool) -> &'static str {
     match (lang, light) {
         (Lang::En, true) => "Light",
         (Lang::En, false) => "Dark",
-        (Lang::Ru, true) => "РЎРІРµС‚Р»С‹Р№",
-        (Lang::Ru, false) => "РўС‘РјРЅС‹Р№",
+        (Lang::Ru, true) => "Светлый",
+        (Lang::Ru, false) => "Тёмный",
     }
 }
 
@@ -270,11 +270,11 @@ pub fn wp_missing(lang: Lang, light: bool, path: &str) -> String {
     match lang {
         Lang::En => format!("{} wallpaper not found: {path}", mode_word(lang, light)),
         Lang::Ru => format!(
-            "{} РѕР±РѕРё РЅРµ РЅР°Р№РґРµРЅС‹: {path}",
+            "{} обои не найдены: {path}",
             if light {
-                "РЎРІРµС‚Р»С‹Рµ"
+                "Светлые"
             } else {
-                "РўС‘РјРЅС‹Рµ"
+                "Тёмные"
             }
         ),
     }
@@ -290,12 +290,12 @@ pub fn dl_progress(lang: Lang, version: &str, done: u64, total: Option<u64>) -> 
         None => crate::update::human_size(done),
     };
     let pct = match total {
-        Some(t) if t > 0 => format!(" вЂ” {}%", (done * 100 / t).min(100)),
+        Some(t) if t > 0 => format!(" — {}%", (done * 100 / t).min(100)),
         _ => String::new(),
     };
     match lang {
-        Lang::En => format!("Downloading v{version} вЂ” {amounts}{pct}вЂ¦"),
-        Lang::Ru => format!("Р—Р°РіСЂСѓР·РєР° v{version} вЂ” {amounts}{pct}вЂ¦"),
+        Lang::En => format!("Downloading v{version} — {amounts}{pct}…"),
+        Lang::Ru => format!("Загрузка v{version} — {amounts}{pct}…"),
     }
 }
 pub fn duration_hm(lang: Lang, mins: i64) -> String {
@@ -311,11 +311,11 @@ pub fn duration_hm(lang: Lang, mins: i64) -> String {
         }
         Lang::Ru => {
             if mins < 60 {
-                format!("{mins} РјРёРЅ")
+                format!("{mins} мин")
             } else if mins % 60 == 0 {
-                format!("{} С‡", mins / 60)
+                format!("{} ч", mins / 60)
             } else {
-                format!("{} С‡ {} РјРёРЅ", mins / 60, mins % 60)
+                format!("{} ч {} мин", mins / 60, mins % 60)
             }
         }
     }
@@ -325,8 +325,8 @@ pub fn next_theme_word(lang: Lang, dark: bool) -> &'static str {
     match (lang, dark) {
         (Lang::En, true) => "dark",
         (Lang::En, false) => "light",
-        (Lang::Ru, true) => "С‚С‘РјРЅР°СЏ",
-        (Lang::Ru, false) => "СЃРІРµС‚Р»Р°СЏ",
+        (Lang::Ru, true) => "тёмная",
+        (Lang::Ru, false) => "светлая",
     }
 }
 
@@ -382,11 +382,11 @@ mod tests {
     #[test]
     fn messages_fill_slots() {
         assert!(msg(Lang::En, "bad_time", "").contains("HH:MM"));
-        assert!(msg(Lang::Ru, "bad_time", "").contains("Р§Р§:РњРњ"));
+        assert!(msg(Lang::Ru, "bad_time", "").contains("ЧЧ:ММ"));
         assert!(msg(Lang::En, "save_fail", "x").contains('x'));
         assert!(msg(Lang::Ru, "accent", "boom").contains("boom"));
-        assert_eq!(mode_word(Lang::Ru, true), "РЎРІРµС‚Р»С‹Р№");
-        assert_eq!(duration_hm(Lang::Ru, 75), "1 С‡ 15 РјРёРЅ");
+        assert_eq!(mode_word(Lang::Ru, true), "Светлый");
+        assert_eq!(duration_hm(Lang::Ru, 75), "1 ч 15 мин");
         assert_eq!(duration_hm(Lang::En, 75), "1 h 15 min");
     }
 }

@@ -311,14 +311,14 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("cyr.theme");
         let sample =
-            "[Theme]\r\nDisplayName=РњРѕСЏ РўС‘РјРЅР°СЏ РўРµРјР°\r\n[VisualStyles]\r\nSystemMode=Dark\r\n";
+            "[Theme]\r\nDisplayName=Моя Тёмная Тема\r\n[VisualStyles]\r\nSystemMode=Dark\r\n";
         let mut bytes = Vec::new();
         for w in sample.encode_utf16() {
             bytes.extend_from_slice(&w.to_le_bytes());
         }
         std::fs::write(&path, &bytes).unwrap();
         let entry = parse_entry(&path, true);
-        assert_eq!(entry.name, "РњРѕСЏ РўС‘РјРЅР°СЏ РўРµРјР°");
+        assert_eq!(entry.name, "Моя Тёмная Тема");
         assert_eq!(entry.system_mode.as_deref(), Some("dark"));
         assert!(entry.user);
         let _ = std::fs::remove_file(&path);

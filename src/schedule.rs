@@ -64,19 +64,19 @@ pub fn sun_info(cfg: &Config, date: NaiveDate) -> String {
                         hm(shifted(set, 0))
                     ),
                     format!(
-                        " вЂў light {}, dark {}",
+                        " • light {}, dark {}",
                         hm(shifted(rise, cfg.light_offset_min)),
                         hm(shifted(set, cfg.dark_offset_min))
                     ),
                 ),
                 Lang::Ru => (
                     format!(
-                        "РЎРµРіРѕРґРЅСЏ: РІРѕСЃС…РѕРґ {}, Р·Р°РєР°С‚ {}",
+                        "Сегодня: восход {}, закат {}",
                         hm(shifted(rise, 0)),
                         hm(shifted(set, 0))
                     ),
                     format!(
-                        " вЂў СЃРІРµС‚Р»Р°СЏ {}, С‚С‘РјРЅР°СЏ {}",
+                        " • светлая {}, тёмная {}",
                         hm(shifted(rise, cfg.light_offset_min)),
                         hm(shifted(set, cfg.dark_offset_min))
                     ),
@@ -90,11 +90,11 @@ pub fn sun_info(cfg: &Config, date: NaiveDate) -> String {
         }
         Sun::PolarDay => match lang {
             Lang::En => "Polar day: sun never sets".into(),
-            Lang::Ru => "РџРѕР»СЏСЂРЅС‹Р№ РґРµРЅСЊ: СЃРѕР»РЅС†Рµ РЅРµ Р·Р°С…РѕРґРёС‚".into(),
+            Lang::Ru => "Полярный день: солнце не заходит".into(),
         },
         Sun::PolarNight => match lang {
             Lang::En => "Polar night: sun never rises".into(),
-            Lang::Ru => "РџРѕР»СЏСЂРЅР°СЏ РЅРѕС‡СЊ: СЃРѕР»РЅС†Рµ РЅРµ РІРѕСЃС…РѕРґРёС‚".into(),
+            Lang::Ru => "Полярная ночь: солнце не восходит".into(),
         },
     }
 }
@@ -149,7 +149,7 @@ fn sun_next_switch(cfg: &Config, now: DateTime<Local>) -> String {
                         i18n::duration_hm(lang, mins)
                     ),
                     Lang::Ru => format!(
-                        "Р”Р°Р»РµРµ: {} РІ {} (С‡РµСЂРµР· {})",
+                        "Далее: {} в {} (через {})",
                         name,
                         hm(next_t),
                         i18n::duration_hm(lang, mins)
@@ -158,13 +158,13 @@ fn sun_next_switch(cfg: &Config, now: DateTime<Local>) -> String {
             }
             if polar_day {
                 match lang {
-                    Lang::En => "Polar day вЂ” stays light (sun never sets)".into(),
-                    Lang::Ru => "РџРѕР»СЏСЂРЅС‹Р№ РґРµРЅСЊ вЂ” РѕСЃС‚Р°С‘С‚СЃСЏ СЃРІРµС‚Р»Р°СЏ (СЃРѕР»РЅС†Рµ РЅРµ Р·Р°С…РѕРґРёС‚)".into(),
+                    Lang::En => "Polar day — stays light (sun never sets)".into(),
+                    Lang::Ru => "Полярный день — остаётся светлая (солнце не заходит)".into(),
                 }
             } else {
                 match lang {
-                    Lang::En => "Polar night вЂ” stays dark (sun never rises)".into(),
-                    Lang::Ru => "РџРѕР»СЏСЂРЅР°СЏ РЅРѕС‡СЊ вЂ” РѕСЃС‚Р°С‘С‚СЃСЏ С‚С‘РјРЅР°СЏ (СЃРѕР»РЅС†Рµ РЅРµ РІРѕСЃС…РѕРґРёС‚)".into(),
+                    Lang::En => "Polar night — stays dark (sun never rises)".into(),
+                    Lang::Ru => "Полярная ночь — остаётся тёмная (солнце не восходит)".into(),
                 }
             }
         }
@@ -183,17 +183,17 @@ fn sun_next_switch(cfg: &Config, now: DateTime<Local>) -> String {
                     let when = if mins == 0 {
                         match lang {
                             Lang::En => "now".to_string(),
-                            Lang::Ru => "СЃРµР№С‡Р°СЃ".to_string(),
+                            Lang::Ru => "сейчас".to_string(),
                         }
                     } else {
                         match lang {
                             Lang::En => format!("in {}", i18n::duration_hm(lang, mins)),
-                            Lang::Ru => format!("С‡РµСЂРµР· {}", i18n::duration_hm(lang, mins)),
+                            Lang::Ru => format!("через {}", i18n::duration_hm(lang, mins)),
                         }
                     };
                     return match lang {
                         Lang::En => format!("Next: {light} at {} ({when})", hm(l2)),
-                        Lang::Ru => format!("Р”Р°Р»РµРµ: {light} РІ {} ({when})", hm(l2)),
+                        Lang::Ru => format!("Далее: {light} в {} ({when})", hm(l2)),
                     };
                 }
                 switch_string(lang, now, light_t, dark_t)
@@ -257,17 +257,17 @@ fn switch_string(
     let when = if mins == 0 {
         match lang {
             Lang::En => "now".to_string(),
-            Lang::Ru => "СЃРµР№С‡Р°СЃ".to_string(),
+            Lang::Ru => "сейчас".to_string(),
         }
     } else {
         match lang {
             Lang::En => format!("in {}", i18n::duration_hm(lang, mins)),
-            Lang::Ru => format!("С‡РµСЂРµР· {}", i18n::duration_hm(lang, mins)),
+            Lang::Ru => format!("через {}", i18n::duration_hm(lang, mins)),
         }
     };
     match lang {
         Lang::En => format!("Next: {} at {} ({})", name, hm(next_t), when),
-        Lang::Ru => format!("Р”Р°Р»РµРµ: {} РІ {} ({})", name, hm(next_t), when),
+        Lang::Ru => format!("Далее: {} в {} ({})", name, hm(next_t), when),
     }
 }
 
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(i18n::duration_hm(Lang::En, 45), "45 min");
         assert_eq!(i18n::duration_hm(Lang::En, 60), "1 h");
         assert_eq!(i18n::duration_hm(Lang::En, 75), "1 h 15 min");
-        assert_eq!(i18n::duration_hm(Lang::Ru, 75), "1 С‡ 15 РјРёРЅ");
+        assert_eq!(i18n::duration_hm(Lang::Ru, 75), "1 ч 15 мин");
     }
 
     #[test]
@@ -346,8 +346,8 @@ mod tests {
         let mut c = cfg_fixed(true, t(7, 0), t(19, 0));
         c.language = "ru".to_string();
         let s = next_switch_info(&c, dt(12, 0));
-        assert!(s.contains("Р”Р°Р»РµРµ:"), "got {s}");
-        assert!(s.contains("С‡РµСЂРµР·"), "got {s}");
+        assert!(s.contains("Далее:"), "got {s}");
+        assert!(s.contains("через"), "got {s}");
     }
 
     fn cfg_sun(auto: bool, lat: Option<f64>, lon: Option<f64>) -> Config {
@@ -365,7 +365,7 @@ mod tests {
         let c = cfg_sun(true, None, None);
         let now = dt(12, 0);
         assert_eq!(desired_theme(&c, now), None);
-        assert_eq!(next_switch_info(&c, now), "Enter coordinatesвЂ¦");
+        assert_eq!(next_switch_info(&c, now), "Enter coordinates…");
         assert!(sun_info(&c, now.date_naive()).contains("Enter coordinates"));
     }
 

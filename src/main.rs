@@ -110,7 +110,7 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
         if let Some(scheduled) = schedule::desired_theme(&cfg, Local::now()) {
             if scheduled != want {
                 eprintln!(
-                    "Note: auto-switch is on and wants {} вЂ” the GUI will revert this shortly. Use the window/tray Switch for a hold until the next switch.",
+                    "Note: auto-switch is on and wants {} — the GUI will revert this shortly. Use the window/tray Switch for a hold until the next switch.",
                     if scheduled == Theme::Dark {
                         "dark"
                     } else {
@@ -140,7 +140,7 @@ fn run_status() -> anyhow::Result<()> {
     if next.is_empty() {
         println!("{head}");
     } else {
-        println!("{head} вЂў {next}");
+        println!("{head} • {next}");
     }
     Ok(())
 }
@@ -711,9 +711,9 @@ fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         let s = i18n::ui(lang);
         let head = if is_dark { s.dark_now } else { s.light_now };
         let tooltip = if next.is_empty() {
-            format!("WinThemeAuto вЂ” {head}")
+            format!("WinThemeAuto — {head}")
         } else {
-            format!("WinThemeAuto вЂ” {head} вЂў {next}")
+            format!("WinThemeAuto — {head} • {next}")
         };
         if st.last_tray_tooltip.as_ref() != Some(&tooltip) || st.last_tray_dark != Some(is_dark) {
             st.last_tray_tooltip = Some(tooltip.clone());
