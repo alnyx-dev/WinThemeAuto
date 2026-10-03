@@ -113,7 +113,7 @@ Closing the window hides it to the tray — use the tray menu or double-click th
 | Action         | What it does                          |
 |----------------|---------------------------------------|
 | `Open`         | Show the main window                  |
-| `Toggle theme` | Flip light ↔ dark immediately         |
+| `Switch to…`   | Flip light ↔ dark immediately (label follows the current theme) |
 | `Exit`         | Quit the app (auto-switch stops)      |
 
 Double-clicking the tray icon also opens the window.
@@ -121,12 +121,22 @@ Double-clicking the tray icon also opens the window.
 ### CLI
 
 ```
-WinThemeAuto-x64.exe [--tray]
+WinThemeAuto-x64.exe [--tray] [--toggle | --light | --dark | --status | --help]
 ```
 
-| Flag    | Description                              |
-|---------|------------------------------------------|
-| `--tray`| Start hidden in the tray (used for autostart) |
+| Flag       | Description                                        |
+|------------|----------------------------------------------------|
+| `--tray`   | Start hidden in the tray (used for autostart)      |
+| `--toggle` | Flip light ↔ dark immediately, no window           |
+| `--light`  | Switch to light immediately, no window             |
+| `--dark`   | Switch to dark immediately, no window              |
+| `--status` | Print current theme + next switch, no window       |
+| `--help`   | Show usage                                         |
+
+Action flags win over `--tray` and work while the GUI instance is running
+(handy for AutoHotkey / StreamDeck / scheduled tasks). `--status` prints
+e.g. `Dark now • Next: light at 07:00 (in 7 h)`; `--toggle/--light/--dark`
+print the resulting `light` / `dark`.
 
 ### Updates
 
@@ -148,6 +158,7 @@ The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for u
 | `Sync accent color` | Applies the per-mode accent on every switch — click a swatch to fill + apply instantly, or type hex. |
 | `Light/Dark accent` | Windows accent color per mode, e.g. `0078D4`. Needs **Show accent color on Start and taskbar** enabled for the taskbar to follow. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
+| `Language` | `EN` / `RU` interface switch in Settings — applies instantly, no restart. |
 | `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
 The header subtitle previews the next switch (`Dark now • Next: dark at 19:00 (in 7 h)`); errors appear in red in the footer status line (bad time format, missing coordinates, save failures).
@@ -178,7 +189,8 @@ Example:
   "dark_wallpaper": "C:/Wallpapers/night.jpg",
   "accent_enabled": true,
   "light_accent": "0078D4",
-  "dark_accent": "4CC2FF"
+  "dark_accent": "4CC2FF",
+  "language": "en"
 }
 ```
 
@@ -228,9 +240,11 @@ Notes:
 ```
 WinThemeAuto/
 ├── src/
-│   ├── main.rs      # UI wiring, timers, tray loop, settings apply
+│   ├── main.rs      # UI wiring, timers, tray loop, settings apply, CLI actions
 │   ├── accent.rs    # Per-mode accent color via SetUserColorPreference + registry fallback
+│   ├── cli.rs       # Headless flags: --toggle/--light/--dark/--status/--help
 │   ├── config.rs    # Load/save/validate %APPDATA%\WinThemeAuto\config.json
+│   ├── i18n.rs      # EN/RU strings for UI, status line, tray and schedule
 │   ├── schedule.rs  # Fixed + sun scheduling, "next switch" text
 │   ├── sun.rs       # Offline sunrise/sunset math
 │   ├── theme.rs     # Registry read/write + broadcast

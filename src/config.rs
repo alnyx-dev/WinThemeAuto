@@ -17,8 +17,12 @@ pub struct Config {
     pub mode: Mode,
     pub light_at: NaiveTime,
     pub dark_at: NaiveTime,
-    pub lat: f64,
-    pub lon: f64,
+    /// Latitude in degrees, `None` = not set yet.
+    /// `Some(0.0)` is a valid location (Gulf of Guinea), unlike the old
+    /// `0.0 == unset` sentinel.
+    pub lat: Option<f64>,
+    /// Longitude in degrees, `None` = not set yet.
+    pub lon: Option<f64>,
     pub light_offset_min: i32,
     pub dark_offset_min: i32,
     pub change_apps: bool,
@@ -39,6 +43,8 @@ pub struct Config {
     pub light_accent: String,
     /// Accent for dark mode, hex `RRGGBB`.
     pub dark_accent: String,
+    /// UI language code: `"en"` or `"ru"`.
+    pub language: String,
 }
 
 impl Default for Config {
@@ -48,8 +54,8 @@ impl Default for Config {
             mode: Mode::Fixed,
             light_at: NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
             dark_at: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
-            lat: 0.0,
-            lon: 0.0,
+            lat: None,
+            lon: None,
             light_offset_min: 0,
             dark_offset_min: 0,
             change_apps: true,
@@ -61,6 +67,7 @@ impl Default for Config {
             accent_enabled: false,
             light_accent: "0078D4".to_string(),
             dark_accent: "0078D4".to_string(),
+            language: "en".to_string(),
         }
     }
 }
@@ -85,16 +92,16 @@ fn normalize_lon(mut lon: f64) -> f64 {
 }
 
 fn sanitize(cfg: &mut Config) {
-    if !cfg.lat.is_finite() {
-        cfg.lat = 0.0;
-    }
-    if !cfg.lon.is_finite() {
-        cfg.lon = 0.0;
-    }
-    cfg.lat = cfg.lat.clamp(-90.0, 90.0);
-    cfg.lon = normalize_lon(cfg.lon);
+    // `None` = never set; `Some(0.0)` is a real place (Gulf of Guinea).
+    cfg.lat = cfg
+        .lat
+        .filter(|v| v.is_finite())
+        .map(|v| v.clamp(-90.0, 90.0));
+    cfg.lon = cfg.lon.filter(|v| v.is_finite()).map(normalize_lon);
     cfg.light_offset_min = cfg.light_offset_min.clamp(-180, 180);
     cfg.dark_offset_min = cfg.dark_offset_min.clamp(-180, 180);
+    let lang = crate::i18n::Lang::from_code(&cfg.language);
+    cfg.language = lang.code().to_string();
 }
 
 fn from_value_merged(v: &serde_json::Value) -> Config {
@@ -120,10 +127,10 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
         }
     }
     if let Some(f) = v.get("lat").and_then(|x| x.as_f64()) {
-        cfg.lat = f;
+        cfg.lat = Some(f);
     }
     if let Some(f) = v.get("lon").and_then(|x| x.as_f64()) {
-        cfg.lon = f;
+        cfg.lon = Some(f);
     }
     if let Some(n) = v.get("light_offset_min").and_then(|x| x.as_i64()) {
         cfg.light_offset_min = (n as i32).clamp(-180, 180);
@@ -157,6 +164,9 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     }
     if let Some(s) = v.get("dark_accent").and_then(|x| x.as_str()) {
         cfg.dark_accent = s.trim().to_string();
+    }
+    if let Some(s) = v.get("language").and_then(|x| x.as_str()) {
+        cfg.language = s.trim().to_string();
     }
     sanitize(&mut cfg);
     cfg
@@ -220,9 +230,8 @@ mod tests {
         assert!(parse_time_flex("xx").is_none());
     }
 
-        #[test]
+    #[test]
     fn merged_keeps_good_fields_on_bad_time() {
-
         let v: serde_json::Value =
             serde_json::from_str(r#"{"auto_enabled":true,"light_at":"oops"}"#).unwrap();
         let c = from_value_merged(&v);
@@ -230,9 +239,8 @@ mod tests {
         assert_eq!(c.light_at.format("%H:%M").to_string(), "07:00");
     }
 
-        #[test]
+    #[test]
     fn merged_parses_custom_wallpapers() {
-
         let v: serde_json::Value = serde_json::from_str(
             r#"{"light_wallpaper":" C:\\a.jpg ","dark_wallpaper":"C:\\b.png"}"#,
         )
@@ -241,8 +249,7 @@ mod tests {
         assert_eq!(c.light_wallpaper, "C:\\a.jpg");
         assert_eq!(c.dark_wallpaper, "C:\\b.png");
         // Old configs without the fields still load.
-        let old: Config =
-            serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
+        let old: Config = serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
         assert_eq!(old.light_wallpaper, "");
         assert_eq!(old.dark_wallpaper, "");
     }
@@ -265,14 +272,55 @@ mod tests {
     #[test]
     fn sanitize_clamps() {
         let mut c = Config {
-            lat: 999.0,
-            lon: 540.0,
+            lat: Some(999.0),
+            lon: Some(540.0),
             light_offset_min: 999,
             ..Config::default()
         };
         sanitize(&mut c);
-        assert_eq!(c.lat, 90.0);
-        assert_eq!(c.lon, 180.0);
+        assert_eq!(c.lat, Some(90.0));
+        assert_eq!(c.lon, Some(180.0));
         assert_eq!(c.light_offset_min, 180);
+    }
+
+    #[test]
+    fn language_sanitizes() {
+        let mut c = Config::default();
+        assert_eq!(c.language, "en");
+        c.language = "RU".to_string();
+        sanitize(&mut c);
+        assert_eq!(c.language, "ru");
+        c.language = "de".to_string();
+        sanitize(&mut c);
+        assert_eq!(c.language, "en");
+        let v: serde_json::Value = serde_json::from_str(r#"{"language":"ru"}"#).unwrap();
+        assert_eq!(from_value_merged(&v).language, "ru");
+    }
+
+    #[test]
+    fn none_means_unset_but_zero_is_valid() {
+        // Unset stays unset.
+        let mut c = Config::default();
+        sanitize(&mut c);
+        assert_eq!(c.lat, None);
+        assert_eq!(c.lon, None);
+        // Explicit 0,0 (Gulf of Guinea) survives sanitize.
+        let mut c = Config {
+            lat: Some(0.0),
+            lon: Some(0.0),
+            ..Config::default()
+        };
+        sanitize(&mut c);
+        assert_eq!(c.lat, Some(0.0));
+        assert_eq!(c.lon, Some(0.0));
+        // Non-finite becomes unset, not 0.0.
+        let mut c = Config {
+            lat: Some(f64::NAN),
+            lon: Some(f64::INFINITY),
+            ..Config::default()
+        };
+        sanitize(&mut c);
+        assert_eq!(c.lat, None);
+        assert_eq!(c.lon, None);
     }
 }

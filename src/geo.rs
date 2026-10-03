@@ -32,7 +32,9 @@ pub fn detect_by_ip() -> Result<Location> {
 fn parse(body: &str) -> Result<Location> {
     let r: Resp = serde_json::from_str(body)?;
     if r.success == Some(false) {
-        bail!(r.message.unwrap_or_else(|| "service returned an error".into()));
+        bail!(r
+            .message
+            .unwrap_or_else(|| "service returned an error".into()));
     }
     let (Some(lat), Some(lon)) = (r.latitude, r.longitude) else {
         bail!("response has no coordinates");

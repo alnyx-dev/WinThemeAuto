@@ -2,7 +2,10 @@ use chrono::{DateTime, NaiveDate, Utc};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Sun {
-    Normal { rise: DateTime<Utc>, set: DateTime<Utc> },
+    Normal {
+        rise: DateTime<Utc>,
+        set: DateTime<Utc>,
+    },
     PolarDay,
     PolarNight,
 }
@@ -14,7 +17,9 @@ pub fn sun_events(lat: f64, lon: f64, date: NaiveDate) -> Sun {
 
     let j_star = n - lon / 360.0;
 
-    let m = (357.5291 + 0.98560028 * j_star).rem_euclid(360.0).to_radians();
+    let m = (357.5291 + 0.98560028 * j_star)
+        .rem_euclid(360.0)
+        .to_radians();
     let c = 1.9148 * m.sin() + 0.0200 * (2.0 * m).sin() + 0.0003 * (3.0 * m).sin();
 
     let lambda = (m.to_degrees() + c + 180.0 + 102.9372)
@@ -26,8 +31,7 @@ pub fn sun_events(lat: f64, lon: f64, date: NaiveDate) -> Sun {
     let dec = (lambda.sin() * 23.4397_f64.to_radians().sin()).asin();
 
     let phi = lat.to_radians();
-    let cos_h = ((-0.833_f64).to_radians().sin() - phi.sin() * dec.sin())
-        / (phi.cos() * dec.cos());
+    let cos_h = ((-0.833_f64).to_radians().sin() - phi.sin() * dec.sin()) / (phi.cos() * dec.cos());
 
     if cos_h > 1.0 {
         return Sun::PolarNight;
@@ -79,7 +83,13 @@ mod tests {
 
     #[test]
     fn polar_cases() {
-        assert!(matches!(sun_events(80.0, 0.0, d(2024, 6, 21)), Sun::PolarDay));
-        assert!(matches!(sun_events(80.0, 0.0, d(2024, 12, 21)), Sun::PolarNight));
+        assert!(matches!(
+            sun_events(80.0, 0.0, d(2024, 6, 21)),
+            Sun::PolarDay
+        ));
+        assert!(matches!(
+            sun_events(80.0, 0.0, d(2024, 12, 21)),
+            Sun::PolarNight
+        ));
     }
 }

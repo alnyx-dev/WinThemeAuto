@@ -10,8 +10,7 @@
 use anyhow::{bail, Context, Result};
 use winreg::{enums::*, RegKey, RegValue};
 
-const EXPLORER_ACCENT: &str =
-    r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent";
+const EXPLORER_ACCENT: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent";
 const DWM_KEY: &str = r"Software\Microsoft\Windows\DWM";
 
 /// Mirrors uxtheme's `IMMERSIVE_COLOR_PREFERENCE`; `color2` is the accent
@@ -23,10 +22,8 @@ struct ImmersiveColorPreference {
     color2: u32,
 }
 
-type GetColorPreference =
-    unsafe extern "system" fn(*mut ImmersiveColorPreference, i32) -> i32;
-type SetColorPreference =
-    unsafe extern "system" fn(*const ImmersiveColorPreference, i32) -> i32;
+type GetColorPreference = unsafe extern "system" fn(*mut ImmersiveColorPreference, i32) -> i32;
+type SetColorPreference = unsafe extern "system" fn(*const ImmersiveColorPreference, i32) -> i32;
 
 /// Parse `#RRGGBB` / `RRGGBB` into a COLORREF (`0x00BBGGRR`).
 pub fn parse_hex(s: &str) -> Option<u32> {
@@ -46,17 +43,34 @@ pub fn to_dword(color: u32) -> u32 {
     0xFF00_0000 | (r << 16) | (g << 8) | b
 }
 
-/// Flat 8-entry fallback palette: `[R,G,B,0x00]` × 8.
-pub fn flat_palette(color: u32) -> [u8; 32] {
+/// Shaded 8-entry fallback palette: `[R,G,B,0x00]` × 8, dark → base → light.
+///
+/// Entry 4 is the base color; 0-3 mix toward black, 5-7 toward white.
+/// Matches the shape Windows Settings writes via `SetUserColorPreference` —
+/// a flat palette (all entries identical) renders as a dirty solid on
+/// taskbar/start in the fallback path.
+pub fn shaded_palette(color: u32) -> [u8; 32] {
     let (r, g, b) = (
-        (color & 0xFF) as u8,
-        ((color >> 8) & 0xFF) as u8,
-        ((color >> 16) & 0xFF) as u8,
+        (color & 0xFF) as f32,
+        ((color >> 8) & 0xFF) as f32,
+        ((color >> 16) & 0xFF) as f32,
     );
+    fn mix(base: f32, target: f32, t: f32) -> u8 {
+        ((base * (1.0 - t) + target * t).round().clamp(0.0, 255.0)) as u8
+    }
     let mut out = [0u8; 32];
     let (chunks, _) = out.as_chunks_mut::<4>();
-    for entry in chunks {
-        *entry = [r, g, b, 0x00];
+    for (i, entry) in chunks.iter_mut().enumerate() {
+        let (rr, gg, bb) = if i < 4 {
+            let t = (4 - i) as f32 * 0.20;
+            (mix(r, 0.0, t), mix(g, 0.0, t), mix(b, 0.0, t))
+        } else if i == 4 {
+            (r as u8, g as u8, b as u8)
+        } else {
+            let t = (i - 4) as f32 * 0.18;
+            (mix(r, 255.0, t), mix(g, 255.0, t), mix(b, 255.0, t))
+        };
+        *entry = [rr, gg, bb, 0x00];
     }
     out
 }
@@ -129,7 +143,7 @@ fn fallback_registry(color: u32) -> Result<()> {
     accent.set_raw_value(
         "AccentPalette",
         &RegValue {
-            bytes: flat_palette(color).to_vec(),
+            bytes: shaded_palette(color).to_vec(),
             vtype: REG_BINARY,
         },
     )?;
@@ -160,10 +174,17 @@ mod tests {
 
     #[test]
     fn palette_shape() {
-        let p = flat_palette(0x00D47800);
+        let p = shaded_palette(0x00D47800);
         assert_eq!(p.len(), 32);
-        // First entry: R,G,B,0x00 of 0xD47800.
-        assert_eq!(&p[..4], &[0x00, 0x78, 0xD4, 0x00]);
-        assert!(p.as_chunks::<4>().0.iter().all(|e| e == &[0x00, 0x78, 0xD4, 0x00]));
+        let chunks = p.as_chunks::<4>().0;
+        // Entry 4 is the base color 0xD47800 -> [0x00, 0x78, 0xD4, 0x00].
+        assert_eq!(&chunks[4], &[0x00, 0x78, 0xD4, 0x00]);
+        // Darker before, lighter after — not flat.
+        let lum = |e: &[u8; 4]| e[0] as u32 + e[1] as u32 + e[2] as u32;
+        assert!(lum(&chunks[0]) < lum(&chunks[4]), "first should be darker");
+        assert!(lum(&chunks[7]) > lum(&chunks[4]), "last should be lighter");
+        assert!(chunks.iter().any(|e| e != &[0x00, 0x78, 0xD4, 0x00]));
+        // Alpha byte stays 0x00.
+        assert!(chunks.iter().all(|e| e[3] == 0x00));
     }
 }

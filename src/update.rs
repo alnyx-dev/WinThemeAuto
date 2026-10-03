@@ -42,12 +42,17 @@ struct Release {
 struct Asset {
     name: String,
     browser_download_url: String,
+    /// GitHub now sends `"sha256:<hex>"` for release assets.
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 pub struct UpdateInfo {
     /// Latest version without leading `v`, e.g. `"0.2.0"`.
     pub latest: String,
     pub download_url: String,
+    /// Lowercase hex SHA256 the downloaded exe must match.
+    pub expected_sha256: String,
     pub is_newer: bool,
 }
 
@@ -69,6 +74,10 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 /// Query GitHub for the latest release and the asset matching our arch.
+/// Also resolves the expected SHA256 — from the API `digest` field when
+/// present, otherwise from the `<exe>.sha256` checksum asset published
+/// by the release workflow. Fails when neither exists: installing an
+/// unverified exe is worse than asking for a manual download.
 pub fn check() -> Result<UpdateInfo> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
@@ -81,8 +90,7 @@ pub fn check() -> Result<UpdateInfo> {
         .map_err(|e| anyhow::anyhow!("update check failed: {e}"))?
         .into_string()?;
 
-    let rel: Release =
-        serde_json::from_str(&body).context("cannot parse release info")?;
+    let rel: Release = serde_json::from_str(&body).context("cannot parse release info")?;
     let want = asset_name();
     let asset = rel
         .assets
@@ -90,20 +98,83 @@ pub fn check() -> Result<UpdateInfo> {
         .find(|a| a.name == want)
         .with_context(|| format!("release {} has no file {want}", rel.tag_name))?;
 
+    let mut expected = asset
+        .digest
+        .as_deref()
+        .and_then(parse_digest)
+        .map(str::to_string);
+    if expected.is_none() {
+        let sha_name = format!("{want}.sha256");
+        if let Some(sha_asset) = rel.assets.iter().find(|a| a.name == sha_name) {
+            expected = Some(fetch_sha256(&agent, &sha_asset.browser_download_url)?);
+        }
+    }
+    let expected = expected.with_context(|| {
+        format!(
+            "release {} has no checksum for {want} — download manually",
+            rel.tag_name
+        )
+    })?;
+
     Ok(UpdateInfo {
         latest: rel.tag_name.trim_start_matches('v').to_string(),
         download_url: asset.browser_download_url.clone(),
+        expected_sha256: expected,
         is_newer: is_newer(&rel.tag_name, current_version()),
     })
 }
 
-/// Download the new exe into the temp dir. Returns its path.
-pub fn download(url: &str) -> Result<PathBuf> {
+/// `"sha256:<hex>"` → lowercase hex, validated.
+fn parse_digest(digest: &str) -> Option<&str> {
+    let hex = digest.strip_prefix("sha256:").unwrap_or(digest).trim();
+    if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Some(hex)
+    } else {
+        None
+    }
+}
+
+/// Download a `<exe>.sha256` checksum file (`"<hex>  <filename>"` or plain hex).
+fn fetch_sha256(agent: &ureq::Agent, url: &str) -> Result<String> {
+    let body = agent
+        .get(url)
+        .set("User-Agent", &user_agent())
+        .call()
+        .map_err(|e| anyhow::anyhow!("checksum download failed: {e}"))?
+        .into_string()?;
+    let hex = body.split_whitespace().next().unwrap_or("").to_lowercase();
+    if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Ok(hex)
+    } else {
+        Err(anyhow::anyhow!("bad checksum file"))
+    }
+}
+
+/// SHA256 hex (lowercase) of a file.
+pub fn sha256_hex(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Download the new exe into the temp dir and verify its SHA256.
+/// Returns its path. Deletes and errors on mismatch.
+pub fn download(info: &UpdateInfo) -> Result<PathBuf> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(180))
         .build();
     let resp = agent
-        .get(url)
+        .get(&info.download_url)
         .set("User-Agent", &user_agent())
         .call()
         .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
@@ -111,6 +182,17 @@ pub fn download(url: &str) -> Result<PathBuf> {
     let dest = std::env::temp_dir().join("WinThemeAuto-update.exe");
     let mut file = std::fs::File::create(&dest)?;
     std::io::copy(&mut resp.into_reader(), &mut file)?;
+    drop(file);
+
+    let actual = sha256_hex(&dest)?;
+    if actual.to_lowercase() != info.expected_sha256.to_lowercase() {
+        let _ = std::fs::remove_file(&dest);
+        anyhow::bail!(
+            "checksum mismatch: expected {}, got {}",
+            info.expected_sha256,
+            actual
+        );
+    }
     Ok(dest)
 }
 
@@ -184,7 +266,7 @@ mod tests {
     #[test]
     fn release_json_parses() {
         let json = r#"{"tag_name":"v0.2.0","assets":[
-            {"name":"WinThemeAuto-x64.exe","browser_download_url":"https://example.com/x64.exe"},
+            {"name":"WinThemeAuto-x64.exe","browser_download_url":"https://example.com/x64.exe","digest":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
             {"name":"WinThemeAuto-x86.exe","browser_download_url":"https://example.com/x86.exe"}]}"#;
         let rel: Release = serde_json::from_str(json).unwrap();
         assert_eq!(rel.tag_name, "v0.2.0");
@@ -194,6 +276,34 @@ mod tests {
             "WinThemeAuto-x86.exe"
         };
         let asset = rel.assets.iter().find(|a| a.name == want).unwrap();
-        assert!(asset.browser_download_url.starts_with("https://example.com/"));
+        assert!(asset
+            .browser_download_url
+            .starts_with("https://example.com/"));
+        // Old assets without digest still parse (digest defaults to None).
+        let old_json = r#"{"tag_name":"v0.1.0","assets":[
+            {"name":"WinThemeAuto-x64.exe","browser_download_url":"https://example.com/x64.exe"}]}"#;
+        let old: Release = serde_json::from_str(old_json).unwrap();
+        assert!(old.assets[0].digest.is_none());
+    }
+
+    #[test]
+    fn digest_parses() {
+        let hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        assert_eq!(parse_digest(&format!("sha256:{hex}")), Some(hex));
+        assert_eq!(parse_digest(hex), Some(hex));
+        assert!(parse_digest("sha256:xyz").is_none());
+        assert!(parse_digest("").is_none());
+    }
+
+    #[test]
+    fn sha256_of_empty_file() {
+        let path = std::env::temp_dir().join("winthemeauto-sha-test.bin");
+        std::fs::write(&path, []).unwrap();
+        let hex = sha256_hex(&path).unwrap();
+        assert_eq!(
+            hex,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }

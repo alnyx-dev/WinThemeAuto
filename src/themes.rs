@@ -19,11 +19,9 @@ pub struct ThemeEntry {
 }
 
 fn system_themes_dir() -> PathBuf {
-    PathBuf::from(
-        std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_string()),
-    )
-    .join("Resources")
-    .join("Themes")
+    PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_string()))
+        .join("Resources")
+        .join("Themes")
 }
 
 fn user_themes_dir() -> Option<PathBuf> {
@@ -130,7 +128,9 @@ fn read_text(path: &Path) -> String {
     // Without BOM: ASCII-range UTF-16LE has a zero high byte in most words.
     if bytes.len() % 2 == 0 && bytes.len() >= 4 {
         let w = words(&bytes);
-        if String::from_utf16(&w).is_ok() && w.iter().filter(|x| **x < 0x100).count() * 4 > w.len() * 3 {
+        if String::from_utf16(&w).is_ok()
+            && w.iter().filter(|x| **x < 0x100).count() * 4 > w.len() * 3
+        {
             return String::from_utf16(&w).unwrap_or_default();
         }
     }
@@ -205,7 +205,10 @@ mod tests {
                 .and_then(|(_, kv)| kv.iter().find(|(key, _)| key.eq_ignore_ascii_case(k)))
                 .map(|(_, v)| v.clone())
         };
-        assert_eq!(get("Theme", "DisplayName").as_deref(), Some("My Light Theme"));
+        assert_eq!(
+            get("Theme", "DisplayName").as_deref(),
+            Some("My Light Theme")
+        );
         assert_eq!(
             get("Control Panel\\Desktop", "Wallpaper").as_deref(),
             Some("%SystemRoot%\\web\\wallpaper\\img0.jpg")
@@ -250,7 +253,13 @@ mod tests {
         std::fs::write(&path, "[Control Panel\\Desktop]\nWallpaper=C:\\a.jpg\n").unwrap();
         let entry = parse_entry(&path);
         assert_eq!(entry.name, "plain");
-        assert_eq!(entry.wallpaper.map(|p| p.to_string_lossy().into_owned()).as_deref(), Some(r"C:\a.jpg"));
+        assert_eq!(
+            entry
+                .wallpaper
+                .map(|p| p.to_string_lossy().into_owned())
+                .as_deref(),
+            Some(r"C:\a.jpg")
+        );
         let _ = std::fs::remove_file(&path);
     }
 

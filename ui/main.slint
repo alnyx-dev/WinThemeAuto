@@ -60,6 +60,42 @@ export component MainWindow inherits Window {
     in-out property <bool> accent-enabled;
     in-out property <string> light-accent;
     in-out property <string> dark-accent;
+    in-out property <int> lang-index;
+
+    // Localized labels, pushed from Rust (no restart needed).
+    in property <string> t-tab-auto;
+    in property <string> t-tab-appearance;
+    in property <string> t-tab-settings;
+    in property <string> t-auto-title;
+    in property <string> t-mode-time;
+    in property <string> t-mode-sun;
+    in property <string> t-light-from;
+    in property <string> t-dark-from;
+    in property <string> t-lat-ph;
+    in property <string> t-lon-ph;
+    in property <string> t-detect;
+    in property <string> t-light-pm;
+    in property <string> t-dark-pm;
+    in property <string> t-apply-to;
+    in property <string> t-apps;
+    in property <string> t-system;
+    in property <string> t-light-label;
+    in property <string> t-dark-label;
+    in property <string> t-light-wp-ph;
+    in property <string> t-dark-wp-ph;
+    in property <string> t-wp-hint;
+    in property <string> t-accent-check;
+    in property <string> t-accent-hint;
+    in property <string> t-rescan;
+    in property <string> t-autostart;
+    in property <string> t-check-updates;
+    in property <string> t-checking;
+    in property <string> t-apply;
+    in property <string> t-to-light;
+    in property <string> t-to-dark;
+    in property <string> t-light-now;
+    in property <string> t-dark-now;
+    in property <string> t-language;
 
     callback toggle-theme();
     callback settings-changed();
@@ -67,6 +103,7 @@ export component MainWindow inherits Window {
     callback browse-light-wallpaper();
     callback browse-dark-wallpaper();
     callback check-updates();
+    callback refresh-themes();
 
     // Pure UI navigation, no Rust involvement.
     property <int> tab-index: 0;
@@ -104,14 +141,14 @@ export component MainWindow inherits Window {
                             color: #0f172a;
                         }
                         Text {
-                            text: root.next-switch != "" ? (root.is-dark ? "Dark now • " : "Light now • ") + root.next-switch : (root.is-dark ? "Dark now" : "Light now");
+                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " • " : root.t-light-now + " • ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
                             font-size: 12px;
                             color: #64748b;
                             overflow: elide;
                         }
                     }
                     Button {
-                        text: root.is-dark ? "To light" : "To dark";
+                        text: root.is-dark ? root.t-to-light : root.t-to-dark;
                         primary: true;
                         clicked => { root.toggle-theme(); }
                     }
@@ -126,19 +163,19 @@ export component MainWindow inherits Window {
             padding: 0px;
             spacing: 6px;
             Button {
-                text: "Auto switch";
+                text: root.t-tab-auto;
                 primary: root.tab-index == 0;
                 horizontal-stretch: 1;
                 clicked => { root.tab-index = 0; }
             }
             Button {
-                text: "Appearance";
+                text: root.t-tab-appearance;
                 primary: root.tab-index == 1;
                 horizontal-stretch: 1;
-                clicked => { root.tab-index = 1; }
+                clicked => { root.tab-index = 1; root.refresh-themes(); }
             }
             Button {
-                text: "Settings";
+                text: root.t-tab-settings;
                 primary: root.tab-index == 2;
                 horizontal-stretch: 1;
                 clicked => { root.tab-index = 2; }
@@ -158,7 +195,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     Text {
-                        text: "Auto switch";
+                        text: root.t-auto-title;
                         font-size: 13px;
                         font-weight: 700;
                         color: #0f172a;
@@ -174,7 +211,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 6px;
                     Button {
-                        text: "By time";
+                        text: root.t-mode-time;
                         primary: root.mode-index == 0;
                         horizontal-stretch: 1;
                         clicked => {
@@ -183,7 +220,7 @@ export component MainWindow inherits Window {
                         }
                     }
                     Button {
-                        text: "Sunrise / sunset";
+                        text: root.t-mode-sun;
                         primary: root.mode-index == 1;
                         horizontal-stretch: 1;
                         clicked => {
@@ -200,7 +237,7 @@ export component MainWindow inherits Window {
                         padding: 0px;
                         spacing: 8px;
                         Text {
-                            text: "Light from";
+                            text: root.t-light-from;
                             font-size: 13px;
                             color: #334155;
                             horizontal-stretch: 1;
@@ -213,7 +250,7 @@ export component MainWindow inherits Window {
                             accepted => { root.settings-changed(); }
                         }
                         Text {
-                            text: "Dark from";
+                            text: root.t-dark-from;
                             font-size: 13px;
                             color: #334155;
                             horizontal-stretch: 1;
@@ -236,18 +273,18 @@ export component MainWindow inherits Window {
                         spacing: 6px;
                         LineEdit {
                             text <=> root.lat;
-                            placeholder-text: "Lat 55.75";
+                            placeholder-text: root.t-lat-ph;
                             horizontal-stretch: 1;
                             accepted => { root.settings-changed(); }
                         }
                         LineEdit {
                             text <=> root.lon;
-                            placeholder-text: "Lon 37.61";
+                            placeholder-text: root.t-lon-ph;
                             horizontal-stretch: 1;
                             accepted => { root.settings-changed(); }
                         }
                         Button {
-                            text: root.locating ? "…" : "Detect";
+                            text: root.locating ? "…" : root.t-detect;
                             enabled: !root.locating;
                             clicked => { root.detect-location(); }
                         }
@@ -271,7 +308,7 @@ export component MainWindow inherits Window {
                         padding: 0px;
                         spacing: 6px;
                         Text {
-                            text: "Light ±";
+                            text: root.t-light-pm;
                             font-size: 12px;
                             color: #334155;
                             vertical-alignment: center;
@@ -283,7 +320,7 @@ export component MainWindow inherits Window {
                             accepted => { root.settings-changed(); }
                         }
                         Text {
-                            text: "Dark ±";
+                            text: root.t-dark-pm;
                             font-size: 12px;
                             color: #334155;
                             vertical-alignment: center;
@@ -304,18 +341,18 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     Text {
-                        text: "Apply to:";
+                        text: root.t-apply-to;
                         font-size: 12px;
                         color: #64748b;
                         vertical-alignment: center;
                     }
                     CheckBox {
-                        text: "Apps";
+                        text: root.t-apps;
                         checked <=> root.change-apps;
                         toggled => { root.settings-changed(); }
                     }
                     CheckBox {
-                        text: "System";
+                        text: root.t-system;
                         checked <=> root.change-system;
                         toggled => { root.settings-changed(); }
                     }
@@ -336,7 +373,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 6px;
                     Text {
-                        text: "Light:";
+                        text: root.t-light-label;
                         font-size: 12px;
                         color: #64748b;
                         width: 38px;
@@ -353,7 +390,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 6px;
                     Text {
-                        text: "Dark:";
+                        text: root.t-dark-label;
                         font-size: 12px;
                         color: #64748b;
                         width: 38px;
@@ -369,9 +406,22 @@ export component MainWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 6px;
+                    Text {
+                        text: "";
+                        width: 38px;
+                    }
+                    Button {
+                        text: root.t-rescan;
+                        horizontal-stretch: 1;
+                        clicked => { root.refresh-themes(); }
+                    }
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
                     LineEdit {
                         text <=> root.light-wallpaper;
-                        placeholder-text: "Light wallpaper (optional)…";
+                        placeholder-text: root.t-light-wp-ph;
                         horizontal-stretch: 1;
                         accepted => { root.settings-changed(); }
                     }
@@ -385,7 +435,7 @@ export component MainWindow inherits Window {
                     spacing: 6px;
                     LineEdit {
                         text <=> root.dark-wallpaper;
-                        placeholder-text: "Dark wallpaper (optional)…";
+                        placeholder-text: root.t-dark-wp-ph;
                         horizontal-stretch: 1;
                         accepted => { root.settings-changed(); }
                     }
@@ -395,7 +445,7 @@ export component MainWindow inherits Window {
                     }
                 }
                 Text {
-                    text: "A custom path wins over the theme wallpaper. Empty = theme only.";
+                    text: root.t-wp-hint;
                     font-size: 11px;
                     color: #94a3b8;
                     wrap: word-wrap;
@@ -405,7 +455,7 @@ export component MainWindow inherits Window {
                     background: #f1f5f9;
                 }
                 CheckBox {
-                    text: "Sync accent color with theme";
+                    text: root.t-accent-check;
                     checked <=> root.accent-enabled;
                     toggled => { root.settings-changed(); }
                 }
@@ -413,7 +463,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 6px;
                     Text {
-                        text: "Light:";
+                        text: root.t-light-label;
                         font-size: 12px;
                         color: #64748b;
                         width: 38px;
@@ -438,7 +488,7 @@ export component MainWindow inherits Window {
                     padding: 0px;
                     spacing: 6px;
                     Text {
-                        text: "Dark:";
+                        text: root.t-dark-label;
                         font-size: 12px;
                         color: #64748b;
                         width: 38px;
@@ -460,7 +510,7 @@ export component MainWindow inherits Window {
                     AccentSwatch { swatch-color: #107C10; hex: "107C10"; active: root.dark-accent == "107C10"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
                 }
                 Text {
-                    text: "Click a swatch to apply instantly — taskbar needs “Show accent color” on.";
+                    text: root.t-accent-hint;
                     font-size: 10px;
                     color: #94a3b8;
                     overflow: elide;
@@ -481,9 +531,36 @@ export component MainWindow inherits Window {
                     padding: 10px;
                     spacing: 8px;
                     CheckBox {
-                        text: "Start with Windows";
+                        text: root.t-autostart;
                         checked <=> root.autostart;
                         toggled => { root.settings-changed(); }
+                    }
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 6px;
+                        Text {
+                            text: root.t-language;
+                            font-size: 13px;
+                            color: #334155;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+                        Button {
+                            text: "EN";
+                            primary: root.lang-index == 0;
+                            clicked => {
+                                root.lang-index = 0;
+                                root.settings-changed();
+                            }
+                        }
+                        Button {
+                            text: "RU";
+                            primary: root.lang-index == 1;
+                            clicked => {
+                                root.lang-index = 1;
+                                root.settings-changed();
+                            }
+                        }
                     }
                 }
             }
@@ -499,7 +576,7 @@ export component MainWindow inherits Window {
                         padding: 0px;
                         spacing: 8px;
                         Button {
-                            text: root.checking-update ? "Checking…" : "Check for updates";
+                            text: root.checking-update ? root.t-checking : root.t-check-updates;
                             enabled: !root.checking-update;
                             clicked => { root.check-updates(); }
                         }
@@ -527,7 +604,7 @@ export component MainWindow inherits Window {
             overflow: elide;
         }
         Button {
-            text: "Apply";
+            text: root.t-apply;
             primary: true;
             horizontal-stretch: 1;
             clicked => { root.settings-changed(); }

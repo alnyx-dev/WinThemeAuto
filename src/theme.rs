@@ -2,13 +2,13 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
+use windows_sys::w;
 use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, PostMessageW, SendMessageTimeoutW, SystemParametersInfoW, HWND_BROADCAST,
     SMTO_ABORTIFHUNG, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETDESKWALLPAPER, WM_SETTINGCHANGE,
     WM_THEMECHANGED,
 };
-use windows_sys::w;
 use winreg::{enums::*, RegKey};
 
 const KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
@@ -36,14 +36,31 @@ impl Theme {
 }
 
 pub fn current_pair() -> (Theme, Theme) {
+    // Missing key/value = Windows default (light). See `try_current_pair`
+    // when you need to distinguish "explicit light" from "never set".
+    let (apps, sys) = try_current_pair();
+    (apps.unwrap_or(Theme::Light), sys.unwrap_or(Theme::Light))
+}
+
+/// Raw registry read: `None` when the key/value is absent or unreadable.
+/// Used for diagnostics; most callers want [`current_pair`] with its
+/// Windows-default fallback.
+pub fn try_current_pair() -> (Option<Theme>, Option<Theme>) {
     let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey(KEY).ok();
     let get = |name: &str| {
         key.as_ref()
             .and_then(|k| k.get_value::<u32, _>(name).ok())
-            .map(|v| if v == 0 { Theme::Dark } else { Theme::Light })
-            .unwrap_or(Theme::Light)
+            .map(theme_from_value)
     };
     (get("AppsUseLightTheme"), get("SystemUsesLightTheme"))
+}
+
+fn theme_from_value(v: u32) -> Theme {
+    if v == 0 {
+        Theme::Dark
+    } else {
+        Theme::Light
+    }
 }
 
 pub fn current() -> Theme {
@@ -62,7 +79,12 @@ pub fn effective_current(apps: bool, system: bool) -> Theme {
     }
 }
 
-pub fn display_theme(apps_theme: Theme, sys_theme: Theme, change_apps: bool, change_system: bool) -> Theme {
+pub fn display_theme(
+    apps_theme: Theme,
+    sys_theme: Theme,
+    change_apps: bool,
+    change_system: bool,
+) -> Theme {
     if change_apps {
         apps_theme
     } else if change_system {

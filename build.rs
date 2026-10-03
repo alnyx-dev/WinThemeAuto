@@ -13,8 +13,7 @@ fn main() {
         write_ico(&ico);
         // Raw 64px premultiplied RGBA for the runtime tray icon, so the
         // exe doesn't carry an SVG renderer just for this.
-        std::fs::write(out.join("icon-64.rgba"), render_rgba(64))
-            .expect("must write icon-64.rgba");
+        std::fs::write(out.join("icon-64.rgba"), render_rgba(64)).expect("must write icon-64.rgba");
         let mut res = winres::WindowsResource::new();
         res.set_icon(ico.to_str().expect("out dir must be UTF-8"));
         res.compile().expect("winres must embed the icon");
