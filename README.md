@@ -55,6 +55,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
+- 🎨 **Accent color sync** — different Windows accent per light/dark mode, applied on every switch
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
 - **Single instance** — a second launch just focuses the running window instead of duplicating tray icons
 
@@ -144,6 +145,8 @@ The footer shows the current version (e.g. v0.2.0) and a **Check for updates** b
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
 | `Light/Dark wallpaper` | Custom image path (`jpg/png/bmp`) per mode — wins over the theme wallpaper. `…` opens a file picker. Empty = theme only. |
+| `Sync accent color` | Applies the per-mode accent (`Light/Dark accent`, hex `RRGGBB`) on every switch. |
+| `Light/Dark accent` | Windows accent color per mode, e.g. `0078D4`. Needs **Show accent color on Start and taskbar** enabled for the taskbar to follow. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
 | `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
@@ -172,7 +175,10 @@ Example:
   "change_apps": true,
   "change_system": true,
   "light_wallpaper": "C:/Wallpapers/day.jpg",
-  "dark_wallpaper": "C:/Wallpapers/night.jpg"
+  "dark_wallpaper": "C:/Wallpapers/night.jpg",
+  "accent_enabled": true,
+  "light_accent": "0078D4",
+  "dark_accent": "4CC2FF"
 }
 ```
 
@@ -186,6 +192,7 @@ Notes:
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
 - **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker or manual entry, validated on Apply) wins over the theme wallpaper. On a switch the wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
+- **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
 - **Scheduler:** every 5 s the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
@@ -224,7 +231,7 @@ Notes:
 - [x] Self-updates via GitHub Releases
 - [x] Wallpaper follows the theme (via `.theme` wallpapers)
 - [x] Custom wallpaper paths (independent of themes)
-- [ ] Accent-color sync option
+- [x] Accent-color sync option
 - [ ] Hotkey for instant toggle
 - [ ] Screen brightness follow (laptops)
 
@@ -236,6 +243,7 @@ Have an idea? [Open an issue](https://github.com/alnyx-dev/WinThemeAuto/issues) 
 WinThemeAuto/
 ├── src/
 │   ├── main.rs      # UI wiring, timers, tray loop, settings apply
+│   ├── accent.rs    # Per-mode accent color via SetUserColorPreference + registry fallback
 │   ├── config.rs    # Load/save/validate %APPDATA%\WinThemeAuto\config.json
 │   ├── schedule.rs  # Fixed + sun scheduling, "next switch" text
 │   ├── sun.rs       # Offline sunrise/sunset math
@@ -324,11 +332,15 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `Nothing to toggle` | Enable at least one of **Apps** / **System**. |
 | `No switches: polar day/night` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
 | `Light/Dark wallpaper not found` | The custom path must point to an existing file — use the `…` picker or fix the path. |
+| `Light/Dark accent must be hex RGB` | Use 6 hex digits, e.g. `0078D4` (a leading `#` is fine too). |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
+| Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
 
-### v0.2.5
+### v0.2.6
+- 🎨 Accent color sync: per-mode Windows accent applied on every switch (Settings-grade path with registry fallback), with one-click swatches
+- 🗂️ Tabbed settings window: Auto switch / Appearance / Settings with a persistent Apply footer
 - 🖼️ Custom wallpaper paths: per-mode image files (file picker included) that win over `.theme` wallpapers
 
 ### v0.2.2

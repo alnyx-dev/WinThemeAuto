@@ -1,5 +1,26 @@
 import { Switch, CheckBox, LineEdit, Button, ComboBox, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
+component AccentSwatch inherits Rectangle {
+    in property <color> swatch-color;
+    in property <string> hex;
+    in property <bool> active;
+    callback chosen(string);
+
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: swatch-color;
+    border-width: active ? 2px : 1px;
+    border-color: active ? #0f172a : #00000033;
+
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.chosen(root.hex); }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "WinThemeAuto";
     icon: @image-url("../icon.svg");
@@ -28,6 +49,7 @@ export component MainWindow inherits Window {
     in-out property <bool> show-advanced;
     in property <string> app-version;
     in property <string> update-info;
+    in property <bool> update-ok;
     in property <bool> checking-update;
     in property <[string]> light-themes;
     in-out property <int> light-theme-index;
@@ -35,6 +57,9 @@ export component MainWindow inherits Window {
     in-out property <int> dark-theme-index;
     in-out property <string> light-wallpaper;
     in-out property <string> dark-wallpaper;
+    in-out property <bool> accent-enabled;
+    in-out property <string> light-accent;
+    in-out property <string> dark-accent;
 
     callback toggle-theme();
     callback settings-changed();
@@ -42,6 +67,9 @@ export component MainWindow inherits Window {
     callback browse-light-wallpaper();
     callback browse-dark-wallpaper();
     callback check-updates();
+
+    // Pure UI navigation, no Rust involvement.
+    property <int> tab-index: 0;
 
     VerticalBox {
         padding: 10px;
@@ -93,8 +121,32 @@ export component MainWindow inherits Window {
 
         // (Next switch lives in the header subtitle — fixed height, no jumps.)
 
+        // ── Tab bar (always visible) ──
+        HorizontalBox {
+            padding: 0px;
+            spacing: 6px;
+            Button {
+                text: "Auto switch";
+                primary: root.tab-index == 0;
+                horizontal-stretch: 1;
+                clicked => { root.tab-index = 0; }
+            }
+            Button {
+                text: "Appearance";
+                primary: root.tab-index == 1;
+                horizontal-stretch: 1;
+                clicked => { root.tab-index = 1; }
+            }
+            Button {
+                text: "Settings";
+                primary: root.tab-index == 2;
+                horizontal-stretch: 1;
+                clicked => { root.tab-index = 2; }
+            }
+        }
+
         // ── Auto switch ──
-        Rectangle {
+        if root.tab-index == 0 : Rectangle {
             background: white;
             border-width: 1px;
             border-color: #e2e8f0;
@@ -210,55 +262,51 @@ export component MainWindow inherits Window {
                     }
                     Text {
                         text: root.sun-info;
-                        height: 28px;
+                        height: 14px;
                         font-size: 11px;
                         color: #92400e;
-                        wrap: word-wrap;
+                        overflow: elide;
                     }
                     HorizontalBox {
                         padding: 0px;
-                        spacing: 8px;
+                        spacing: 6px;
                         Text {
-                            text: "Light / dark offset (min)";
+                            text: "Light ±";
                             font-size: 12px;
                             color: #334155;
-                            horizontal-stretch: 1;
                             vertical-alignment: center;
                         }
                         LineEdit {
                             text <=> root.light-offset;
                             placeholder-text: "0";
-                            width: 55px;
+                            horizontal-stretch: 1;
                             accepted => { root.settings-changed(); }
+                        }
+                        Text {
+                            text: "Dark ±";
+                            font-size: 12px;
+                            color: #334155;
+                            vertical-alignment: center;
                         }
                         LineEdit {
                             text <=> root.dark-offset;
                             placeholder-text: "0";
-                            width: 55px;
+                            horizontal-stretch: 1;
                             accepted => { root.settings-changed(); }
                         }
                     }
                 }
-            }
-        }
-
-        // ── Targets + themes (one card) ──
-        Rectangle {
-            background: white;
-            border-width: 1px;
-            border-color: #e2e8f0;
-            border-radius: 10px;
-            VerticalBox {
-                padding: 10px;
-                spacing: 6px;
+                Rectangle {
+                    height: 1px;
+                    background: #f1f5f9;
+                }
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
                     Text {
                         text: "Apply to:";
-                        font-size: 13px;
-                        font-weight: 600;
-                        color: #0f172a;
+                        font-size: 12px;
+                        color: #64748b;
                         vertical-alignment: center;
                     }
                     CheckBox {
@@ -272,6 +320,18 @@ export component MainWindow inherits Window {
                         toggled => { root.settings-changed(); }
                     }
                 }
+            }
+        }
+
+        // ── Appearance: themes, wallpapers, accent (one card) ──
+        if root.tab-index == 1 : Rectangle {
+            background: white;
+            border-width: 1px;
+            border-color: #e2e8f0;
+            border-radius: 10px;
+            VerticalBox {
+                padding: 10px;
+                spacing: 6px;
                 HorizontalBox {
                     padding: 0px;
                     spacing: 6px;
@@ -340,59 +400,137 @@ export component MainWindow inherits Window {
                     color: #94a3b8;
                     wrap: word-wrap;
                 }
-            }
-        }
-
-        // ── Footer ──
-        Rectangle {
-            background: white;
-            border-width: 1px;
-            border-color: #e2e8f0;
-            border-radius: 10px;
-            VerticalBox {
-                padding: 10px;
-                spacing: 6px;
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 8px;
-                    CheckBox {
-                        text: "Start with Windows";
-                        horizontal-stretch: 1;
-                        checked <=> root.autostart;
-                        toggled => { root.settings-changed(); }
-                    }
-                    Button {
-                        text: "Apply";
-                        primary: true;
-                        clicked => { root.settings-changed(); }
-                    }
+                Rectangle {
+                    height: 1px;
+                    background: #f1f5f9;
+                }
+                CheckBox {
+                    text: "Sync accent color with theme";
+                    checked <=> root.accent-enabled;
+                    toggled => { root.settings-changed(); }
                 }
                 HorizontalBox {
                     padding: 0px;
-                    spacing: 8px;
+                    spacing: 6px;
                     Text {
-                        text: "v" + root.app-version;
-                        font-size: 11px;
-                        color: #94a3b8;
+                        text: "Light:";
+                        font-size: 12px;
+                        color: #64748b;
+                        width: 38px;
                         vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> root.light-accent;
+                        placeholder-text: "0078D4";
                         horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); }
                     }
-                    Button {
-                        text: root.checking-update ? "Checking…" : "Check for updates";
-                        enabled: !root.checking-update;
-                        clicked => { root.check-updates(); }
-                    }
+                    AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.light-accent == "FFB900"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.light-accent == "E81123"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #EC008C; hex: "EC008C"; active: root.light-accent == "EC008C"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #B4009E; hex: "B4009E"; active: root.light-accent == "B4009E"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #744DA9; hex: "744DA9"; active: root.light-accent == "744DA9"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #0078D4; hex: "0078D4"; active: root.light-accent == "0078D4"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #00B7C3; hex: "00B7C3"; active: root.light-accent == "00B7C3"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #107C10; hex: "107C10"; active: root.light-accent == "107C10"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
                 }
-                // One fixed line: error (red) wins, else update info. Never grows.
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    Text {
+                        text: "Dark:";
+                        font-size: 12px;
+                        color: #64748b;
+                        width: 38px;
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> root.dark-accent;
+                        placeholder-text: "0078D4";
+                        horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); }
+                    }
+                    AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.dark-accent == "FFB900"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.dark-accent == "E81123"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #EC008C; hex: "EC008C"; active: root.dark-accent == "EC008C"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #B4009E; hex: "B4009E"; active: root.dark-accent == "B4009E"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #744DA9; hex: "744DA9"; active: root.dark-accent == "744DA9"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #0078D4; hex: "0078D4"; active: root.dark-accent == "0078D4"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #00B7C3; hex: "00B7C3"; active: root.dark-accent == "00B7C3"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                    AccentSwatch { swatch-color: #107C10; hex: "107C10"; active: root.dark-accent == "107C10"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
+                }
                 Text {
-                    text: root.status != "" ? root.status : root.update-info;
-                    height: 14px;
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: root.status != "" ? #b91c1c : #64748b;
+                    text: "Click a swatch to apply instantly — taskbar needs “Show accent color” on.";
+                    font-size: 10px;
+                    color: #94a3b8;
                     overflow: elide;
                 }
             }
+        }
+
+        // ── Settings ──
+        if root.tab-index == 2 : VerticalBox {
+            padding: 0px;
+            spacing: 8px;
+            Rectangle {
+                background: white;
+                border-width: 1px;
+                border-color: #e2e8f0;
+                border-radius: 10px;
+                VerticalBox {
+                    padding: 10px;
+                    spacing: 8px;
+                    CheckBox {
+                        text: "Start with Windows";
+                        checked <=> root.autostart;
+                        toggled => { root.settings-changed(); }
+                    }
+                }
+            }
+            Rectangle {
+                background: white;
+                border-width: 1px;
+                border-color: #e2e8f0;
+                border-radius: 10px;
+                VerticalBox {
+                    padding: 10px;
+                    spacing: 8px;
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 8px;
+                        Button {
+                            text: root.checking-update ? "Checking…" : "Check for updates";
+                            enabled: !root.checking-update;
+                            clicked => { root.check-updates(); }
+                        }
+                        Text {
+                            text: root.update-info != "" ? root.update-info : "v" + root.app-version;
+                            font-size: 11px;
+                            color: root.update-ok ? #15803d : #94a3b8;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Slim footer: errors only + Apply, always visible ──
+        Text {
+            text: root.status;
+            height: 14px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #b91c1c;
+            overflow: elide;
+        }
+        Button {
+            text: "Apply";
+            primary: true;
+            horizontal-stretch: 1;
+            clicked => { root.settings-changed(); }
         }
     }
 }

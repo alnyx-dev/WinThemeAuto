@@ -33,6 +33,12 @@ pub struct Config {
     /// Custom wallpaper for dark mode ("" = use theme wallpaper).
     /// Wins over `dark_theme` wallpaper when set.
     pub dark_wallpaper: String,
+    /// Sync the Windows accent color with the theme.
+    pub accent_enabled: bool,
+    /// Accent for light mode, hex `RRGGBB` (e.g. `"0078D4"`).
+    pub light_accent: String,
+    /// Accent for dark mode, hex `RRGGBB`.
+    pub dark_accent: String,
 }
 
 impl Default for Config {
@@ -52,6 +58,9 @@ impl Default for Config {
             dark_theme: String::new(),
             light_wallpaper: String::new(),
             dark_wallpaper: String::new(),
+            accent_enabled: false,
+            light_accent: "0078D4".to_string(),
+            dark_accent: "0078D4".to_string(),
         }
     }
 }
@@ -140,6 +149,15 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     if let Some(s) = v.get("dark_wallpaper").and_then(|x| x.as_str()) {
         cfg.dark_wallpaper = s.trim().to_string();
     }
+    if let Some(b) = v.get("accent_enabled").and_then(|x| x.as_bool()) {
+        cfg.accent_enabled = b;
+    }
+    if let Some(s) = v.get("light_accent").and_then(|x| x.as_str()) {
+        cfg.light_accent = s.trim().to_string();
+    }
+    if let Some(s) = v.get("dark_accent").and_then(|x| x.as_str()) {
+        cfg.dark_accent = s.trim().to_string();
+    }
     sanitize(&mut cfg);
     cfg
 }
@@ -212,8 +230,9 @@ mod tests {
         assert_eq!(c.light_at.format("%H:%M").to_string(), "07:00");
     }
 
-    #[test]
+        #[test]
     fn merged_parses_custom_wallpapers() {
+
         let v: serde_json::Value = serde_json::from_str(
             r#"{"light_wallpaper":" C:\\a.jpg ","dark_wallpaper":"C:\\b.png"}"#,
         )
@@ -226,6 +245,21 @@ mod tests {
             serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
         assert_eq!(old.light_wallpaper, "");
         assert_eq!(old.dark_wallpaper, "");
+    }
+
+    #[test]
+    fn merged_parses_accent_fields() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"accent_enabled":true,"light_accent":" FF0000 ","dark_accent":"4cc2ff"}"#,
+        )
+        .unwrap();
+        let c = from_value_merged(&v);
+        assert!(c.accent_enabled);
+        assert_eq!(c.light_accent, "FF0000");
+        assert_eq!(c.dark_accent, "4cc2ff");
+        let d = Config::default();
+        assert!(!d.accent_enabled);
+        assert_eq!(d.light_accent, "0078D4");
     }
 
     #[test]

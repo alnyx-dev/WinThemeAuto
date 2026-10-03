@@ -84,6 +84,13 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
     if system {
         key.set_value("SystemUsesLightTheme", &v)?;
     }
+    notify_updated();
+    Ok(())
+}
+
+/// Re-broadcast a theme/color change: immediate refresh plus one more
+/// after 200 ms for slow apps, with taskbar invalidation.
+pub fn notify_updated() {
     std::thread::spawn(|| {
         broadcast_change();
         refresh_taskbars();
@@ -92,7 +99,6 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(200));
         broadcast_change();
     });
-    Ok(())
 }
 
 /// Point the desktop wallpaper at `path` (used for full-theme switching).

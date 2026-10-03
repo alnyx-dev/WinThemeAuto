@@ -1,6 +1,6 @@
 [package]
 name = "win-theme-auto"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 license = "MIT"
 
@@ -17,7 +17,7 @@ rfd = "0.15"
 resvg = "0.48"
 ureq = "2"
 raw-window-handle = "0.6"
-windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_Security"] }
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_Security"] }
 
 [build-dependencies]
 slint-build = "1"

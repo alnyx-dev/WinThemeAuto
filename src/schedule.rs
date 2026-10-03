@@ -30,6 +30,7 @@ pub fn desired_theme(cfg: &Config, now: DateTime<Local>) -> Theme {
     }
 }
 
+/// Single-line summary (fits the fixed 14px info line, elided on overflow).
 pub fn sun_info(cfg: &Config, date: NaiveDate) -> String {
     match sun::sun_events(cfg.lat, cfg.lon, date) {
         Sun::Normal { rise, set } => {
@@ -40,7 +41,7 @@ pub fn sun_info(cfg: &Config, date: NaiveDate) -> String {
             );
             if cfg.light_offset_min != 0 || cfg.dark_offset_min != 0 {
                 s += &format!(
-                    "\nLight from {}, dark from {}",
+                    " • light {}, dark {}",
                     hm(shifted(rise, cfg.light_offset_min)),
                     hm(shifted(set, cfg.dark_offset_min))
                 );

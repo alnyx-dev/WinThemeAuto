@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
+mod accent;
 mod config;
 mod geo;
 mod schedule;
@@ -26,6 +27,7 @@ struct State {
     last_scheduled: Option<Theme>,
     last_titlebar_sys: Option<Theme>,
     last_wallpaper: Option<PathBuf>,
+    last_accent: Option<u32>,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -67,6 +69,7 @@ fn run() -> anyhow::Result<()> {
         last_scheduled: None,
         last_titlebar_sys: None,
         last_wallpaper: None,
+        last_accent: None,
     }));
 
     let ui = MainWindow::new()?;
@@ -227,6 +230,9 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::ThemeEntry]) {
     ui.set_dark_theme_index(theme_index(themes, &cfg.dark_theme));
     ui.set_light_wallpaper(cfg.light_wallpaper.clone().into());
     ui.set_dark_wallpaper(cfg.dark_wallpaper.clone().into());
+    ui.set_accent_enabled(cfg.accent_enabled);
+    ui.set_light_accent(cfg.light_accent.clone().into());
+    ui.set_dark_accent(cfg.dark_accent.clone().into());
 }
 
 /// ComboBox index for a stored theme path (0 = flags only).
@@ -275,6 +281,7 @@ fn tick(ui: &MainWindow, state: &Shared) {
                 }
             }
             apply_wallpaper(ui, &mut st, want);
+            apply_accent(ui, &mut st, want);
         }
 
         let info = if st.cfg.mode == Mode::Sun {
@@ -294,6 +301,31 @@ fn tick(ui: &MainWindow, state: &Shared) {
         let shown =
             theme::display_theme(apps_theme, sys_theme, st.cfg.change_apps, st.cfg.change_system);
         ui.set_is_dark(shown == Theme::Dark);
+    }
+}
+
+/// Apply the accent color for `want` when sync is enabled.
+/// Skips redundant writes via `last_accent`.
+fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
+    if !st.cfg.accent_enabled {
+        return;
+    }
+    let hex = if want == Theme::Light {
+        st.cfg.light_accent.clone()
+    } else {
+        st.cfg.dark_accent.clone()
+    };
+    // Validated on Apply; stay silent here so a hand-edited config
+    // never spams the status line every 5 seconds.
+    let Some(color) = accent::parse_hex(&hex) else {
+        return;
+    };
+    if st.last_accent == Some(color) {
+        return;
+    }
+    match accent::apply(color) {
+        Ok(()) => st.last_accent = Some(color),
+        Err(e) => ui.set_status(format!("Accent: {e}").into()),
     }
 }
 
@@ -352,6 +384,7 @@ fn toggle(ui: &MainWindow, state: &Shared) {
             ui.set_status("".into());
             ui.set_is_dark(new == Theme::Dark);
             apply_wallpaper(ui, &mut state.borrow_mut(), new);
+            apply_accent(ui, &mut state.borrow_mut(), new);
         }
         Err(e) => {
             ui.set_status(format!("Error: {e}").into());
@@ -431,14 +464,16 @@ fn check_updates(ui: &MainWindow) {
     }
     ui.set_checking_update(true);
     ui.set_update_info("Checking for updates…".into());
+    ui.set_update_ok(false);
 
     let weak = ui.as_weak();
     std::thread::spawn(move || {
         let info = update::check();
-        let set = |text: &str, done: bool| {
+        let set = |text: &str, done: bool, ok: bool| {
             let text = text.to_string();
             let _ = weak.upgrade_in_event_loop(move |ui| {
                 ui.set_update_info(text.into());
+                ui.set_update_ok(ok);
                 if done {
                     ui.set_checking_update(false);
                 }
@@ -448,7 +483,7 @@ fn check_updates(ui: &MainWindow) {
         let info = match info {
             Ok(i) => i,
             Err(e) => {
-                set(&format!("Update check failed: {e}"), true);
+                set(&format!("Update check failed: {e}"), true, false);
                 return;
             }
         };
@@ -456,21 +491,23 @@ fn check_updates(ui: &MainWindow) {
             set(
                 &format!("You have the latest version (v{}).", info.latest),
                 true,
+                true,
             );
             return;
         }
 
-        set(&format!("Found v{} — downloading…", info.latest), false);
+        set(&format!("Found v{} — downloading…", info.latest), false, false);
         let new_exe = match update::download(&info.download_url) {
             Ok(p) => p,
             Err(e) => {
-                set(&format!("Download failed: {e}"), true);
+                set(&format!("Download failed: {e}"), true, false);
                 return;
             }
         };
 
         set(
             &format!("Installing v{} — the app will restart…", info.latest),
+            false,
             false,
         );
         match update::self_install(&new_exe) {
@@ -479,7 +516,7 @@ fn check_updates(ui: &MainWindow) {
                     let _ = slint::quit_event_loop();
                 });
             }
-            Err(e) => set(&format!("Install failed: {e}"), true),
+            Err(e) => set(&format!("Install failed: {e}"), true, false),
         }
     });
 }
@@ -545,6 +582,18 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
         }
     }
 
+    let accent_enabled = ui.get_accent_enabled();
+    let light_accent = ui.get_light_accent().trim().to_string();
+    let dark_accent = ui.get_dark_accent().trim().to_string();
+    if accent_enabled {
+        for (label, h) in [("Light", &light_accent), ("Dark", &dark_accent)] {
+            if accent::parse_hex(h).is_none() {
+                ui.set_status(format!("{label} accent must be hex RGB, e.g. 0078D4").into());
+                return;
+            }
+        }
+    }
+
     let new_cfg = {
         let st = state.borrow();
         let (old_lat, old_lon) = (st.cfg.lat, st.cfg.lon);
@@ -563,6 +612,9 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
             dark_theme,
             light_wallpaper,
             dark_wallpaper,
+            accent_enabled,
+            light_accent,
+            dark_accent,
         }
     };
     if let Err(e) = new_cfg.save() {
