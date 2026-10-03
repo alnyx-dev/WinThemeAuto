@@ -13,12 +13,16 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 tray-icon = "0.21"
 anyhow = "1"
+resvg = "0.48"
 ureq = "2"
 raw-window-handle = "0.6"
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_Security"] }
 
 [build-dependencies]
 slint-build = "1"
+resvg = "0.48"
+ico = "0.4"
+winres = "0.1"
 
 [profile.release]
 opt-level = "s"

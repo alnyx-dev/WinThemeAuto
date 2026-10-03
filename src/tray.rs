@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tray_icon::{
     menu::{Menu, MenuId, MenuItem, PredefinedMenuItem},
     Icon, TrayIcon, TrayIconBuilder,
@@ -37,24 +37,37 @@ pub fn create() -> Result<Tray> {
 }
 
 fn make_icon() -> Icon {
-    const S: u32 = 32;
-    let mut rgba = Vec::with_capacity((S * S * 4) as usize);
-    let c = (S as f32 - 1.0) / 2.0;
-    for y in 0..S {
-        for x in 0..S {
-            let (dx, dy) = (x as f32 - c, y as f32 - c);
-            let d = (dx * dx + dy * dy).sqrt();
-            let px = if d > 15.0 {
-                [0, 0, 0, 0]
-            } else if d > 13.5 {
-                [128, 128, 128, 255]
-            } else if (x as f32) < c {
-                [30, 30, 30, 255]
-            } else {
-                [245, 245, 245, 255]
-            };
-            rgba.extend_from_slice(&px);
-        }
+    // Rendered from icon.svg at startup; premultiplied RGBA is exactly
+    // what the Windows tray (HICON) expects.
+    let rgba = render_svg(64).expect("bundled icon.svg must rasterize");
+    Icon::from_rgba(rgba, 64, 64).expect("valid icon")
+}
+
+/// Rasterize the bundled `icon.svg` to premultiplied RGBA at `size`px.
+fn render_svg(size: u32) -> Result<Vec<u8>> {
+    const SVG: &[u8] = include_bytes!("../icon.svg");
+    let tree = resvg::usvg::Tree::from_data(SVG, &resvg::usvg::Options::default())
+        .map_err(|e| anyhow::anyhow!("cannot parse icon.svg: {e}"))?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)
+        .context("icon pixmap too large")?;
+    let scale = size as f32 / tree.size().width().max(1.0);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    Ok(pixmap.take())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_rasterizes() {
+        let rgba = render_svg(32).unwrap();
+        assert_eq!(rgba.len(), 32 * 32 * 4);
+        let opaque = rgba.as_chunks::<4>().0.iter().filter(|p| p[3] > 16).count();
+        assert!(opaque > 32 * 32 / 2, "icon is mostly transparent");
     }
-    Icon::from_rgba(rgba, S, S).expect("valid icon")
 }

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌗 WinThemeAuto
+<img src="icon.svg" width="120" alt="WinThemeAuto logo">
+
+# WinThemeAuto
 
 **Automatically switch Windows between light and dark themes — by schedule or by sunrise and sunset.**
 
