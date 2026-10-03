@@ -370,7 +370,7 @@ Please keep PRs focused and add/adjust unit tests for `config`, `schedule`, `sun
 
 If you find this useful, a star costs you one click and keeps the project alive:
 
-[![Star History](https://starchart.cc/alnyx-dev/WinThemeAuto.svg?variant=adaptive)](https://star-history.com/#alnyx-dev/WinThemeAuto&Timeline)
+[![Star History](https://api.star-history.com/svg?repos=alnyx-dev/WinThemeAuto&type=Date)](https://www.star-history.com/#alnyx-dev/WinThemeAuto&Date)
 
 ## 📄 License
 
