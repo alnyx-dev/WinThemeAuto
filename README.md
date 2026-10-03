@@ -324,6 +324,10 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 📜 Changelog
 
+### v0.2.7
+- 📦 Slimmer exe: 12.7 MB → 10.6 MB (tray icon pre-rendered at build time, `panic=abort`)
+- 🌐 Landing refresh: Lucide glyphs, accent + geolocation cards, brand text selection
+
 ### v0.2.6
 - 🎨 Accent color sync: per-mode Windows accent applied on every switch (Settings-grade path with registry fallback), with one-click swatches
 - 🗂️ Tabbed settings window: Auto switch / Appearance / Settings with a persistent Apply footer
