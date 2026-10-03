@@ -70,6 +70,8 @@
     --glow-1: rgba(245, 179, 94, 0.35);
     --glow-2: rgba(102, 85, 129, 0.22);
     --shadow: 0 20px 50px -20px rgba(60, 45, 20, 0.25);
+    --select-bg: #f5b35e;
+    --select-fg: #241a08;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -102,6 +104,7 @@
     --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  ::selection { background: var(--select-bg, #f5b35e); color: var(--select-fg, #241a08); }
   html { scroll-behavior: smooth; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -432,45 +435,60 @@
   <section>
     <h2 class="display">Why it earns its tray slot</h2>
     <p class="section-sub">Everything the big theme tools do, minus the installer, the service and the account.</p>
+<!-- Icons: Lucide (ISC License) https://lucide.dev -->
     <div class="bento">
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg></span>
           <h3>Time or sun, your call</h3>
         </div>
         <p>Fixed hours with overnight ranges, or offline sunrise/sunset math for your coordinates with minute offsets.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M4 17.5l4.5-4 3.5 3 3-2.5 5 3.5"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span>
           <h3>Full themes, not just flags</h3>
         </div>
         <p>Point it at installed light and dark .theme files — or any two images — and the wallpaper changes along, silently, no flashing windows.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h16"/><circle cx="9" cy="8" r="2.4" fill="var(--card)"/><path d="M4 16h16"/><circle cx="15" cy="16" r="2.4" fill="currentColor" stroke="none"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg></span>
+          <h3>Accent follows the theme</h3>
+        </div>
+        <p>One accent color for day, another for night — picked from swatches in a click and applied with every switch.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+          <h3>Finds your sun in one click</h3>
+        </div>
+        <p>Detect fills your coordinates from IP once — every sunrise after that is computed offline, on your machine.</p>
+      </article>
+      <article class="bcard reveal">
+        <div class="bcard-top">
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg></span>
           <h3>Apps and system, separately</h3>
         </div>
         <p>Dark apps with a light taskbar? Light apps after dark? Mix however you like.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v4h-4"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></span>
           <h3>Updates itself</h3>
         </div>
         <p>One click checks GitHub Releases, swaps the exe and restarts. Settings survive.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="3" width="16" height="16" rx="4"/><path d="M9 12h6"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg></span>
           <h3>Stays out of the way</h3>
         </div>
         <p>Single tray icon, autostart, single instance. About 12 MB on disk, ~0% CPU idle.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
-          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="10" width="14" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
           <h3>Private by construction</h3>
         </div>
         <p>Everything lives in a local config file. The network is touched only when you press a button.</p>
