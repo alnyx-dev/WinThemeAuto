@@ -101,6 +101,22 @@ fn run() -> anyhow::Result<()> {
     }
     {
         let w = ui.as_weak();
+        ui.on_browse_light_wallpaper(move || {
+            if let Some(ui) = w.upgrade() {
+                browse_wallpaper(&ui, true);
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        ui.on_browse_dark_wallpaper(move || {
+            if let Some(ui) = w.upgrade() {
+                browse_wallpaper(&ui, false);
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
         ui.on_check_updates(move || {
             if let Some(ui) = w.upgrade() {
                 check_updates(&ui);
@@ -209,6 +225,8 @@ fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::ThemeEntry]) {
     ui.set_dark_themes(ModelRc::new(VecModel::from(names)));
     ui.set_light_theme_index(theme_index(themes, &cfg.light_theme));
     ui.set_dark_theme_index(theme_index(themes, &cfg.dark_theme));
+    ui.set_light_wallpaper(cfg.light_wallpaper.clone().into());
+    ui.set_dark_wallpaper(cfg.dark_wallpaper.clone().into());
 }
 
 /// ComboBox index for a stored theme path (0 = flags only).
@@ -279,23 +297,32 @@ fn tick(ui: &MainWindow, state: &Shared) {
     }
 }
 
-/// Swap the wallpaper to the one from the full theme configured for
-/// `want`, if any. Silent when unconfigured or already applied.
+/// Swap the wallpaper for `want`, if any. A custom wallpaper path wins
+/// over the full-theme wallpaper; silent when unconfigured, missing
+/// or already applied.
 fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
-    let configured = if want == Theme::Light {
-        st.cfg.light_theme.clone()
+    let custom = if want == Theme::Light {
+        st.cfg.light_wallpaper.clone()
     } else {
-        st.cfg.dark_theme.clone()
+        st.cfg.dark_wallpaper.clone()
     };
-    if configured.is_empty() {
-        return;
-    }
-    let wallpaper = st
-        .themes
-        .iter()
-        .find(|t| t.path.to_string_lossy() == configured)
-        .and_then(|t| t.wallpaper.clone());
-    let Some(path) = wallpaper else {
+    let path = if !custom.is_empty() {
+        Some(PathBuf::from(custom))
+    } else {
+        let configured = if want == Theme::Light {
+            st.cfg.light_theme.clone()
+        } else {
+            st.cfg.dark_theme.clone()
+        };
+        if configured.is_empty() {
+            return;
+        }
+        st.themes
+            .iter()
+            .find(|t| t.path.to_string_lossy() == configured)
+            .and_then(|t| t.wallpaper.clone())
+    };
+    let Some(path) = path else {
         return;
     };
     if st.last_wallpaper.as_ref() == Some(&path) {
@@ -370,7 +397,35 @@ fn detect_location(ui: &MainWindow) {
     });
 }
 
+/// Native file picker for a custom wallpaper. Runs off the UI thread;
+/// fills the matching field on pick, stays silent on cancel.
+fn browse_wallpaper(ui: &MainWindow, light: bool) {
+    let weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let picked = rfd::FileDialog::new()
+            .set_title(if light {
+                "Choose light-mode wallpaper"
+            } else {
+                "Choose dark-mode wallpaper"
+            })
+            .add_filter("Images", &["jpg", "jpeg", "png", "bmp"])
+            .pick_file();
+
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            if let Some(path) = picked {
+                let s: SharedString = path.to_string_lossy().into_owned().into();
+                if light {
+                    ui.set_light_wallpaper(s);
+                } else {
+                    ui.set_dark_wallpaper(s);
+                }
+            }
+        });
+    });
+}
+
 fn check_updates(ui: &MainWindow) {
+
     if ui.get_checking_update() {
         return;
     }
@@ -481,6 +536,15 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
         }
     }
 
+    let light_wallpaper = ui.get_light_wallpaper().trim().to_string();
+    let dark_wallpaper = ui.get_dark_wallpaper().trim().to_string();
+    for (label, p) in [("Light", &light_wallpaper), ("Dark", &dark_wallpaper)] {
+        if !p.is_empty() && !PathBuf::from(p).is_file() {
+            ui.set_status(format!("{label} wallpaper not found: {p}").into());
+            return;
+        }
+    }
+
     let new_cfg = {
         let st = state.borrow();
         let (old_lat, old_lon) = (st.cfg.lat, st.cfg.lon);
@@ -497,6 +561,8 @@ fn apply_settings(ui: &MainWindow, state: &Shared) {
             change_system: ui.get_change_system(),
             light_theme,
             dark_theme,
+            light_wallpaper,
+            dark_wallpaper,
         }
     };
     if let Err(e) = new_cfg.save() {

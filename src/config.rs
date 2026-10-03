@@ -27,6 +27,12 @@ pub struct Config {
     pub light_theme: String,
     /// Full `.theme` file applied on dark switch ("" = flags only).
     pub dark_theme: String,
+    /// Custom wallpaper for light mode ("" = use theme wallpaper).
+    /// Wins over `light_theme` wallpaper when set.
+    pub light_wallpaper: String,
+    /// Custom wallpaper for dark mode ("" = use theme wallpaper).
+    /// Wins over `dark_theme` wallpaper when set.
+    pub dark_wallpaper: String,
 }
 
 impl Default for Config {
@@ -44,6 +50,8 @@ impl Default for Config {
             change_system: true,
             light_theme: String::new(),
             dark_theme: String::new(),
+            light_wallpaper: String::new(),
+            dark_wallpaper: String::new(),
         }
     }
 }
@@ -126,6 +134,12 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     if let Some(s) = v.get("dark_theme").and_then(|x| x.as_str()) {
         cfg.dark_theme = s.to_string();
     }
+    if let Some(s) = v.get("light_wallpaper").and_then(|x| x.as_str()) {
+        cfg.light_wallpaper = s.trim().to_string();
+    }
+    if let Some(s) = v.get("dark_wallpaper").and_then(|x| x.as_str()) {
+        cfg.dark_wallpaper = s.trim().to_string();
+    }
     sanitize(&mut cfg);
     cfg
 }
@@ -188,13 +202,30 @@ mod tests {
         assert!(parse_time_flex("xx").is_none());
     }
 
-    #[test]
+        #[test]
     fn merged_keeps_good_fields_on_bad_time() {
+
         let v: serde_json::Value =
             serde_json::from_str(r#"{"auto_enabled":true,"light_at":"oops"}"#).unwrap();
         let c = from_value_merged(&v);
         assert!(c.auto_enabled);
         assert_eq!(c.light_at.format("%H:%M").to_string(), "07:00");
+    }
+
+    #[test]
+    fn merged_parses_custom_wallpapers() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"light_wallpaper":" C:\\a.jpg ","dark_wallpaper":"C:\\b.png"}"#,
+        )
+        .unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.light_wallpaper, "C:\\a.jpg");
+        assert_eq!(c.dark_wallpaper, "C:\\b.png");
+        // Old configs without the fields still load.
+        let old: Config =
+            serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
+        assert_eq!(old.light_wallpaper, "");
+        assert_eq!(old.dark_wallpaper, "");
     }
 
     #[test]

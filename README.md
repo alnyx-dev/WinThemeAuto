@@ -54,7 +54,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Start with Windows** — registry `Run` key autostart (starts hidden with `--tray`)
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
-- 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently
+- 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
 - **Single instance** — a second launch just focuses the running window instead of duplicating tray icons
 
@@ -102,7 +102,7 @@ cargo test
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect via IP**, then optionally set offsets.
 4. Under **Apply theme to**, check **Apps** and/or **System**.
-5. (Optional) under **Windows themes**, pick a full `.theme` for light and dark — the wallpaper will follow each switch.
+5. (Optional) under **Windows themes**, pick a full `.theme` for light and dark — the wallpaper will follow each switch. Or set a **custom wallpaper path** per mode (via the `…` picker) — it wins over the theme wallpaper.
 6. Click **Apply**. Settings save automatically and take effect within ~5 seconds.
 
 Closing the window hides it to the tray — use the tray menu or double-click the icon to bring it back.
@@ -143,6 +143,7 @@ The footer shows the current version (e.g. v0.2.0) and a **Check for updates** b
 | `Light/Dark offset (min)` | Shift relative to sunrise/sunset. Integer `-180…180`. Negative = earlier. |
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
+| `Light/Dark wallpaper` | Custom image path (`jpg/png/bmp`) per mode — wins over the theme wallpaper. `…` opens a file picker. Empty = theme only. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
 | `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
 
@@ -169,7 +170,9 @@ Example:
   "light_offset_min": -30,
   "dark_offset_min": 15,
   "change_apps": true,
-  "change_system": true
+  "change_system": true,
+  "light_wallpaper": "C:/Wallpapers/day.jpg",
+  "dark_wallpaper": "C:/Wallpapers/night.jpg"
 }
 ```
 
@@ -182,12 +185,12 @@ Notes:
 ## 🧠 How it works
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
-- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). On a switch the matching wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
+- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker or manual entry, validated on Apply) wins over the theme wallpaper. On a switch the wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
 - **Scheduler:** every 5 s the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
 - **Sun mode:** offline solar calculation (mean anomaly → ecliptic longitude → transit → hour angle, `-0.833°` zenith correction) per date + longitude/latitude. Returns `Normal { rise, set }`, `PolarDay`, or `PolarNight`.
-- **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window sized to its content — it grows automatically when info lines appear. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
+- **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window with a stable size — info lines occupy reserved space so the window never jumps. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
 - **Self-update:** compares `CARGO_PKG_VERSION` with the latest GitHub Release tag, downloads the arch-matching asset and hands over to a hidden updater script that waits for exit, swaps the exe and relaunches with the same args.
 - **Autostart:** standard `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry.
 - **Single instance:** a named mutex guards the process; a second launch forwards focus to the running window and exits.
@@ -210,7 +213,7 @@ Notes:
 - **Taskbar stuck?** The app already refreshes `Shell_TrayWnd` on every switch — if your taskbar still lags, it's a Windows quirk, not the app.
 - **Multiple PCs:** copy `%APPDATA%\WinThemeAuto\config.json` between machines to clone your setup.
 - **Manual mode:** disable **Auto switch** and uncheck autostart — the app becomes a pure tray toggle for themes.
-- **Wallpaper that follows:** pick light/dark themes whose wallpapers you like — e.g. a bright photo theme for day, a dark abstract one for night.
+- **Wallpaper that follows:** pick light/dark themes whose wallpapers you like — e.g. a bright photo theme for day, a dark abstract one for night. Or skip themes entirely and set two custom image paths.
 - **Second launch?** It just focuses the already-running window — you'll never get duplicate tray icons.
 
 ## 🗺️ Roadmap
@@ -220,7 +223,7 @@ Notes:
 - [x] x64 and x86 release builds via GitHub Actions
 - [x] Self-updates via GitHub Releases
 - [x] Wallpaper follows the theme (via `.theme` wallpapers)
-- [ ] Custom wallpaper paths (independent of themes)
+- [x] Custom wallpaper paths (independent of themes)
 - [ ] Accent-color sync option
 - [ ] Hotkey for instant toggle
 - [ ] Screen brightness follow (laptops)
@@ -249,7 +252,7 @@ WinThemeAuto/
 └── Cargo.toml
 ```
 
-Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono`, `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `anyhow`.
+Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono`, `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `anyhow`, `rfd` (native file picker).
 
 ## 🔒 Privacy
 
@@ -320,9 +323,13 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `Location failed…` | No internet or IP service blocked — enter coordinates manually. |
 | `Nothing to toggle` | Enable at least one of **Apps** / **System**. |
 | `No switches: polar day/night` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
+| `Light/Dark wallpaper not found` | The custom path must point to an existing file — use the `…` picker or fix the path. |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
 
 ## 📜 Changelog
+
+### v0.2.5
+- 🖼️ Custom wallpaper paths: per-mode image files (file picker included) that win over `.theme` wallpapers
 
 ### v0.2.2
 - 🖥️ Reworked settings window: compact cards, stable size (no more jumping on location detect or status updates)

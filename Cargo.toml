@@ -1,6 +1,6 @@
 [package]
 name = "win-theme-auto"
-version = "0.2.2"
+version = "0.2.5"
 edition = "2021"
 license = "MIT"
 
@@ -13,6 +13,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 tray-icon = "0.21"
 anyhow = "1"
+rfd = "0.15"
 resvg = "0.48"
 ureq = "2"
 raw-window-handle = "0.6"

@@ -33,10 +33,14 @@ export component MainWindow inherits Window {
     in-out property <int> light-theme-index;
     in property <[string]> dark-themes;
     in-out property <int> dark-theme-index;
+    in-out property <string> light-wallpaper;
+    in-out property <string> dark-wallpaper;
 
     callback toggle-theme();
     callback settings-changed();
     callback detect-location();
+    callback browse-light-wallpaper();
+    callback browse-dark-wallpaper();
     callback check-updates();
 
     VerticalBox {
@@ -301,6 +305,40 @@ export component MainWindow inherits Window {
                         horizontal-stretch: 1;
                         selected => { root.settings-changed(); }
                     }
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    LineEdit {
+                        text <=> root.light-wallpaper;
+                        placeholder-text: "Light wallpaper (optional)…";
+                        horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); }
+                    }
+                    Button {
+                        text: "…";
+                        clicked => { root.browse-light-wallpaper(); }
+                    }
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    LineEdit {
+                        text <=> root.dark-wallpaper;
+                        placeholder-text: "Dark wallpaper (optional)…";
+                        horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); }
+                    }
+                    Button {
+                        text: "…";
+                        clicked => { root.browse-dark-wallpaper(); }
+                    }
+                }
+                Text {
+                    text: "A custom path wins over the theme wallpaper. Empty = theme only.";
+                    font-size: 11px;
+                    color: #94a3b8;
+                    wrap: word-wrap;
                 }
             }
         }
