@@ -338,6 +338,13 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 📜 Changelog
 
+### v0.2.8
+- 🖥️ Headless CLI: `--toggle` / `--light` / `--dark` / `--status` / `--help` for hotkeys and scripts (works alongside the running app)
+- 🔔 Live tray: status tooltip and Switch to light/dark label follow the theme
+- 🔒 Verified self-updates: SHA256 checksum via release digest or `.sha256` asset
+- 🌐 EN/RU interface with instant switch, translated status and schedule lines
+- 🛠️ Core fixes: `0,0` coordinates valid, stale accent/wallpaper cache reset on Apply, exe-verified single instance, shaded accent palette, theme rescan without restart
+
 ### v0.2.7
 - 📦 Slimmer exe: 12.7 MB → 10.6 MB (tray icon pre-rendered at build time, `panic=abort`)
 - 🌐 Landing refresh: Lucide glyphs, accent + geolocation cards, brand text selection
