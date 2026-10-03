@@ -67,7 +67,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 
 Get them from the [latest release](https://github.com/alnyx-dev/WinThemeAuto/releases). No installer, no admin rights — each exe is a single portable file.
 
-**System requirements:** Windows 10 (1809+) or Windows 11. ~12 MB download, ~0% CPU when idle (wakes up once every 5 s).
+**System requirements:** Windows 10 (1809+) or Windows 11. ~11 MB download, ~0% CPU when idle (wakes up once every 5 s).
 
 ## 🚀 Quick start
 
