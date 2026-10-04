@@ -1,6 +1,6 @@
 [package]
 name = "win-theme-auto"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 
@@ -11,19 +11,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
-tray-icon = "0.21"
+tray-icon = "0.26"
 anyhow = "1"
-rfd = "0.15"
-ureq = "2"
+rfd = "0.17"
+ureq = "3"
 sha2 = "0.10"
 raw-window-handle = "0.6"
-windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_Security"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_Security"] }
 
 [build-dependencies]
 slint-build = "1"
 resvg = "0.48"
 ico = "0.4"
 winres = "0.1"
+
+[dev-dependencies]
+chrono-tz = "0.10"
 
 [profile.release]
 opt-level = "s"

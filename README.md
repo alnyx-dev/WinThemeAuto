@@ -48,7 +48,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Separate Apps / System targets** — switch `AppsUseLightTheme`, `SystemUsesLightTheme`, or both
 - **One-click toggle** — instantly flip the current theme from the window or tray
 - **Next-switch preview** — shows what switches next, at what time, and in how long
-- **IP geolocation** — one-click coordinate detection via `ipwho.is` (or enter coordinates manually)
+- **IP geolocation** — one-click coordinate detection via `ipwho.is` (with `ipapi.co` fallback), or enter coordinates manually
 - **System tray** — close minimizes to tray; double-click tray icon to reopen; `Open` / `Toggle theme` / `Exit` menu
 - **Start with Windows** — registry `Run` key autostart (starts hidden with `--tray`)
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
@@ -67,7 +67,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 
 Get them from the [latest release](https://github.com/alnyx-dev/WinThemeAuto/releases). No installer, no admin rights — each exe is a single portable file.
 
-**System requirements:** Windows 10 (1809+) or Windows 11. ~11 MB download, ~0% CPU when idle (wakes up once every 5 s).
+**System requirements:** Windows 10 (1809+) or Windows 11. ~11 MB download, ~0% CPU when idle (wakes exactly at each switch, plus a 60 s safety net).
 
 ## 🚀 Quick start
 
@@ -103,8 +103,8 @@ cargo test
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect**, then set offsets in minutes.
 4. Still on the tab, pick **Apply to**: **Apps** and/or **System**.
 5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (via the `…` picker, wins over theme wallpaper). Enable **Sync accent color** and click a swatch (or type hex) per mode.
-6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**.
-7. Click **Apply** (always visible at the bottom). Settings save and take effect within ~5 seconds.
+6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**, plus a **Logs** button (`%APPDATA%\WinThemeAuto\app.log`).
+7. Click **Apply** (always visible at the bottom). Settings save and apply immediately.
 
 Closing the window hides it to the tray — use the tray menu or double-click the icon to bring it back.
 
@@ -136,7 +136,8 @@ WinThemeAuto-x64.exe [--tray] [--toggle | --light | --dark | --status | --help]
 Action flags win over `--tray` and work while the GUI instance is running
 (handy for AutoHotkey / StreamDeck / scheduled tasks). `--status` prints
 e.g. `Dark now • Next: light at 07:00 (in 7 h)`; `--toggle/--light/--dark`
-print the resulting `light` / `dark`.
+print the resulting `light` / `dark` and hold it until the next scheduled
+switch, just like the in-app Switch.
 
 ### Updates
 
@@ -146,7 +147,7 @@ The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for u
 
 | Setting | Description |
 |---------|-------------|
-| `Enabled` | Master switch for automatic switching. Checked every 5 s. |
+| `Enabled` | Master switch for automatic switching. Checked exactly at each switch (+60 s safety net). |
 | `By time / Sunrise and sunset` | Switching mode. |
 | `Light from` / `Dark from` | Fixed-mode boundaries (`HH:MM`). May cross midnight. Must differ. |
 | `Lat.` / `Lon.` | Coordinates for sun mode. Valid ranges: lat `-90…90`, lon `-180…180`. |
@@ -192,15 +193,19 @@ Example:
   "accent_enabled": true,
   "light_accent": "0078D4",
   "dark_accent": "4CC2FF",
-  "language": "en"
+  "language": "en",
+  "manual_hold": null,
+  "manual_hold_until": null
 }
 ```
 
 Notes:
 
 - Unknown or malformed fields are ignored; invalid times fall back to defaults (`07:00` / `19:00`).
-- Out-of-range values are clamped (`lat`, `lon`, offsets).
+- Out-of-range values are clamped (`lat`, `lon`, offsets); an expired `manual_hold_until` clears the hold.
+- `manual_hold` / `manual_hold_until` are managed by Switch/CLI — no need to hand-edit them.
 - Saves are atomic (`config.json.tmp` → rename). A fully unparseable file is backed up to `config.json.corrupt.bak` and defaults are used.
+- Diagnostics go to `%APPDATA%\WinThemeAuto\app.log` (rotated at 256 KB, one backup kept; **Logs** button in Settings opens it).
 
 ## 🧠 How it works
 
@@ -208,7 +213,7 @@ Notes:
 - **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker or manual entry, validated on Apply) wins over the theme wallpaper. On a switch the wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
-- **Scheduler:** every 5 s the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
+- **Scheduler:** at each scheduled switch (plus a 60 s safety net for clock changes and sleep/resume) the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
 - **Sun mode:** offline solar calculation (mean anomaly → ecliptic longitude → transit → hour angle, `-0.833°` zenith correction) per date + longitude/latitude. Returns `Normal { rise, set }`, `PolarDay`, or `PolarNight`.
 - **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window with a stable size — info lines occupy reserved space so the window never jumps. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
@@ -242,15 +247,19 @@ Notes:
 ```
 WinThemeAuto/
 ├── src/
-│   ├── main.rs      # UI wiring, timers, tray loop, settings apply, CLI actions
+│   ├── main.rs      # Entry point, CLI actions, event-loop wiring
+│   ├── actions.rs   # Scheduler tick, toggle, apply, self-update flow
+│   ├── ui.rs        # Window setup, language, dialogs, background tasks
+│   ├── state.rs     # Shared app state + theme/hold helpers
+│   ├── log.rs       # Rotating file log (%APPDATA%\WinThemeAuto\app.log)
 │   ├── accent.rs    # Per-mode accent color via SetUserColorPreference + registry fallback
 │   ├── cli.rs       # Headless flags: --toggle/--light/--dark/--status/--help
 │   ├── config.rs    # Load/save/validate %APPDATA%\WinThemeAuto\config.json
 │   ├── i18n.rs      # EN/RU strings for UI, status line, tray and schedule
-│   ├── schedule.rs  # Fixed + sun scheduling, "next switch" text
+│   ├── schedule.rs  # Fixed + sun scheduling, next-switch datetimes
 │   ├── sun.rs       # Offline sunrise/sunset math
 │   ├── theme.rs     # Registry read/write + broadcast
-│   ├── geo.rs       # IP geolocation (ipwho.is)
+│   ├── geo.rs       # IP geolocation (ipwho.is, ipapi.co fallback)
 │   ├── tray.rs      # Tray icon + menu
 │   ├── themes.rs    # Installed .theme enumeration + parsing
 │   ├── single_instance.rs # Named-mutex guard + focus running window
@@ -262,13 +271,13 @@ WinThemeAuto/
 └── Cargo.toml
 ```
 
-Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono`, `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `anyhow`, `rfd` (native file picker).
+Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev-tests), `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `anyhow`, `rfd` (native file picker).
 
 ## 🔒 Privacy
 
 - Coordinates and preferences stay local in your config file.
 - Network is used only when **you** ask for it:
-  - **Detect via IP** → one GET to `https://ipwho.is/`
+  - **Detect via IP** → one GET to `https://ipwho.is/` (falls back to `https://ipapi.co/json/`)
   - **Check for updates** → GitHub Releases API + exe download from `github.com`
 - Sun-time computation itself is fully offline.
 
@@ -291,7 +300,7 @@ Yes, Windows 10 1809+ and Windows 11, both 64- and 32-bit builds.
 <details>
 <summary><b>Does it send anything to the internet?</b></summary>
 
-Only on your explicit action: **Detect via IP** queries `ipwho.is`, **Check for updates** queries the GitHub Releases API. Everything else — including sunrise/sunset math — is offline.
+Only on your explicit action: **Detect via IP** queries `ipwho.is` (fallback `ipapi.co`), **Check for updates** queries the GitHub Releases API. Everything else — including sunrise/sunset math — is offline.
 
 </details>
 
@@ -342,6 +351,14 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.4.0
+- ⏰ Exact scheduler: wakes precisely at each switch (60 s safety net for clock/sleep drift) instead of polling every 5 s
+- ✋ Persistent hold: manual theme (window, tray or CLI) survives restarts — stored in config until the next switch
+- 📝 Rotating log file with a **Logs** button in Settings
+- 🌍 Geolocation fallback (`ipapi.co`) when the primary provider fails
+- ⚡ Theme rescan moved off the UI thread; `main.rs` split into `actions` / `ui` / `state` modules
+- 📦 Dependency refresh: `ureq 3`, `tray-icon 0.26`, `rfd 0.17`, `windows-sys 0.61`
 
 ### v0.3.0
 - ✋ Manual override that sticks: Switch holds the hand-picked theme until the next scheduled change (auto no longer snaps it back in 5 s)
