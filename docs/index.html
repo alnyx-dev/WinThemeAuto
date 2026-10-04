@@ -131,9 +131,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    column-gap: 18px;
     padding: 22px 0;
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; margin-right: auto; }
   .brand img { width: 30px; height: 30px; display: block; }
   .nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; }
   .nav-right a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
@@ -182,6 +183,18 @@
   }
   .seg button:hover { color: var(--fg); }
   .seg button.on { color: var(--btn-fg); }
+  /* Fixed-size theme switch: translated labels must not resize the block. */
+  #seg-theme { width: 210px; }
+  #seg-theme button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   a:focus-visible, button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
@@ -247,6 +260,16 @@
   }
   .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow), 0 8px 28px -8px var(--glow-1); }
   .btn:active { transform: translateY(1px) scale(0.99); }
+  /* Fixed-size download button: translated labels must not resize it. */
+  #dl-x64 {
+    width: 240px;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .alt-link { font-size: 14px; color: var(--muted); }
   .alt-link a { color: var(--fg); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
   .hero-meta {
@@ -302,16 +325,18 @@
   }
   .section-sub { color: var(--muted); margin-bottom: 28px; max-width: 60ch; }
 
-  .bento { columns: 2; column-gap: 16px; margin-bottom: 8px; }
+  .bento { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: stretch; margin-bottom: 8px; }
   .bcard {
     position: relative;
     overflow: hidden;
-    break-inside: avoid;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 18px;
     padding: 22px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
   }
   .bcard:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--accent); }
@@ -340,8 +365,8 @@
   }
   .glyph svg { width: 22px; height: 22px; display: block; }
   .bcard h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
-  .bcard p { color: var(--muted); font-size: 14.5px; }
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+  .bcard p { color: var(--muted); font-size: 14.5px; flex: 1; }
+  .reveal { opacity: 0; transform: translateY(26px) scale(0.985); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
   .reveal.in { opacity: 1; transform: none; }
 
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -390,164 +415,198 @@
     html { scroll-behavior: auto; }
   }
   @media (max-width: 760px) {
-    .hero { grid-template-columns: 1fr; padding: 36px 0 64px; gap: 48px; }
-    .hero-art { order: -1; }
-    .live-chip { left: 50%; transform: translateX(-50%); bottom: -24px; }
+    .wrap { padding: 0 18px; }
+    nav { padding: 16px 0; flex-wrap: wrap; row-gap: 12px; }
+    .brand { font-size: 15px; }
+    .nav-gh { display: none; }
+    .nav-ver { display: none; }
+    .nav-right { order: 3; flex: 1 1 100%; }
+    #seg-theme { flex: 1 1 auto; width: auto; min-width: 0; }
+    .seg button { font-size: 12px; padding: 5px 8px; }
+    .hero { grid-template-columns: 1fr; padding: 28px 0 64px; gap: 40px; }
+    .hero-art img { width: min(200px, 52vw); }
+    h1 { font-size: clamp(32px, 9vw, 40px); }
+    .lede { font-size: 16px; margin-bottom: 24px; }
+    .cta-row { flex-direction: column; align-items: center; gap: 12px; }
+    #dl-x64 { width: 100%; max-width: 340px; }
+    .alt-link { text-align: center; }
+    .live-chip {
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: -24px;
+      font-size: 12px;
+      padding: 8px 12px;
+      max-width: 94vw;
+      white-space: nowrap;
+    }
+    h2 { font-size: 22px; }
+    section { padding: 8px 0 48px; }
     .steps { grid-template-columns: 1fr; }
-    .bento { columns: 1; }
+    .bento { grid-template-columns: 1fr; }
+    .bcard { padding: 18px; }
+    footer { justify-content: center; text-align: center; }
+  }
+  @media (max-width: 420px) {
+    .seg button { font-size: 11.5px; }
+    .eyebrow { font-size: 12px; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
+  <div class="wrap">
 
   <nav class="rise d1">
     <div class="brand display"><img src="icon.svg" alt="" width="30" height="30">WinThemeAuto</div>
+    <div class="seg" id="seg-lang" data-value="en" role="group" aria-label="Site language">
+      <span class="seg-pill" aria-hidden="true"></span>
+      <button type="button" data-val="en">EN</button>
+      <button type="button" data-val="ru">RU</button>
+    </div>
     <div class="nav-right">
-      <div class="seg" role="group" aria-label="Site color theme">
-        <span class="seg-pill" id="seg-pill" aria-hidden="true"></span>
-        <button type="button" data-mode="system">System</button>
-        <button type="button" data-mode="light">Light</button>
-        <button type="button" data-mode="dark">Dark</button>
+      <div class="seg" id="seg-theme" data-value="system" role="group" aria-label="Site color theme">
+        <span class="seg-pill" aria-hidden="true"></span>
+        <button type="button" data-val="system" data-i18n="theme_system">System</button>
+        <button type="button" data-val="light" data-i18n="theme_light">Light</button>
+        <button type="button" data-val="dark" data-i18n="theme_dark">Dark</button>
       </div>
       <span class="nav-ver" id="nav-ver">latest</span>
-      <a href="https://github.com/alnyx-dev/WinThemeAuto">GitHub</a>
+      <a class="nav-gh" href="https://github.com/alnyx-dev/WinThemeAuto">GitHub</a>
     </div>
   </nav>
 
   <div class="hero">
     <div>
-      <p class="eyebrow rise d2">Free · Open source · <b>Portable</b></p>
-      <h1 class="display rise d2">Day and night,<br>handled <span class="sun">by the sun.</span></h1>
-      <p class="lede rise d3">WinThemeAuto switches Windows between light and dark themes on your schedule — or follows real sunrise and sunset. One small exe, living quietly in your tray.</p>
+      <p class="eyebrow rise d2" data-i18n="eyebrow">Free · Open source · <b>Portable</b></p>
+      <h1 class="display rise d2" data-i18n="h1">Day and night,<br>handled <span class="sun">by the sun.</span></h1>
+      <p class="lede rise d3" data-i18n="lede">WinThemeAuto switches Windows between light and dark themes on your schedule — or follows real sunrise and sunset. One small exe, living quietly in your tray.</p>
       <div class="cta-row rise d4">
-        <a class="btn" id="dl-x64" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x64.exe">Download for Windows</a>
-        <span class="alt-link"><span id="rec-note">64-bit recommended</span> · <a id="dl-x86" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x86.exe">32-bit build</a></span>
+        <a class="btn" id="dl-x64" data-i18n="dl" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x64.exe">Download for Windows</a>
+        <span class="alt-link"><span id="rec-note" data-i18n="rec64">64-bit recommended</span> · <a id="dl-x86" data-i18n="dl32" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x86.exe">32-bit build</a></span>
       </div>
       <p class="hero-meta rise d5" id="meta">Single portable .exe — no installer, no admin rights.</p>
     </div>
     <div class="hero-art rise d3">
       <img src="icon.svg" width="240" height="240" alt="WinThemeAuto app icon — sun setting into night waves">
-      <div class="live-chip"><span class="live-dot"></span><b>Auto-switch on</b>&nbsp;<span id="chip-text">follows the sun</span></div>
+      <div class="live-chip"><span class="live-dot"></span><b data-i18n="chip_on">Auto-switch on</b>&nbsp;<span id="chip-text">follows the sun</span></div>
     </div>
   </div>
 
   <section>
-    <h2 class="display">Why it earns its tray slot</h2>
-    <p class="section-sub">Everything the big theme tools do, minus the installer, the service and the account.</p>
+    <h2 class="display reveal" data-i18n="why_h">Why it earns its tray slot</h2>
+    <p class="section-sub reveal" data-i18n="why_sub">Everything the big theme tools do, minus the installer, the service and the account.</p>
 <!-- Icons: Lucide (ISC License) https://lucide.dev -->
     <div class="bento">
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg></span>
-          <h3>Time or sun, your call</h3>
+          <h3 data-i18n="c1h">Time or sun, your call</h3>
         </div>
-        <p>Fixed hours with overnight ranges, or offline sunrise/sunset math for your coordinates with minute offsets.</p>
+        <p data-i18n="c1p">Fixed hours with overnight ranges, or offline sunrise/sunset math for your coordinates with minute offsets.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span>
-          <h3>Full themes, not just flags</h3>
+          <h3 data-i18n="c2h">Full themes, not just flags</h3>
         </div>
-        <p>Point it at installed light and dark .theme files — or any two images — and the wallpaper changes along, silently, no flashing windows.</p>
+        <p data-i18n="c2p">Point it at installed light and dark .theme files — or any two images — and the wallpaper changes along, silently, no flashing windows.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg></span>
-          <h3>Accent follows the theme</h3>
+          <h3 data-i18n="c3h">Accent follows the theme</h3>
         </div>
-        <p>One accent color for day, another for night — picked from swatches in a click and applied with every switch.</p>
+        <p data-i18n="c3p">One accent color for day, another for night — picked from swatches in a click and applied with every switch.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
-          <h3>Finds your sun in one click</h3>
+          <h3 data-i18n="c4h">Finds your sun in one click</h3>
         </div>
-        <p>Detect fills your coordinates from IP once — every sunrise after that is computed offline, on your machine.</p>
+        <p data-i18n="c4p">Detect fills your coordinates from IP once — every sunrise after that is computed offline, on your machine.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg></span>
-          <h3>Apps and system, separately</h3>
+          <h3 data-i18n="c5h">Apps and system, separately</h3>
         </div>
-        <p>Dark apps with a light taskbar? Light apps after dark? Mix however you like.</p>
+        <p data-i18n="c5p">Dark apps with a light taskbar? Light apps after dark? Mix however you like.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></span>
-          <h3>Updates itself</h3>
+          <h3 data-i18n="c6h">Updates itself</h3>
         </div>
-        <p>One click checks GitHub Releases, verifies the SHA256 checksum, swaps the exe and restarts. Settings survive.</p>
+        <p data-i18n="c6p">One click checks GitHub Releases, verifies the SHA256 checksum, swaps the exe and restarts. Settings survive.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg></span>
-          <h3>Scriptable</h3>
+          <h3 data-i18n="c7h">Scriptable</h3>
         </div>
-        <p>Headless --toggle, --light, --dark and --status flags for hotkeys, schedulers and scripts.</p>
+        <p data-i18n="c7p">Headless --toggle, --light, --dark and --status flags for hotkeys, schedulers and scripts.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg></span>
-          <h3>Speaks your language</h3>
+          <h3 data-i18n="c8h">Speaks your language</h3>
         </div>
-        <p>Full English and Russian interface with one-click switching — every label, error, tray hint and sunrise caption.</p>
+        <p data-i18n="c8p">Full English and Russian interface with one-click switching — every label, error, tray hint and sunrise caption.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></span>
-          <h3>Manual override that sticks</h3>
+          <h3 data-i18n="c9h">Manual override that sticks</h3>
         </div>
-        <p>Hit Switch in the middle of the day and the manual theme holds until the next scheduled change — no more snap-back within seconds.</p>
+        <p data-i18n="c9p">Hit Switch in the middle of the day and the manual theme holds until the next scheduled change — no more snap-back within seconds.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>
-          <h3>A tray that shows the theme</h3>
+          <h3 data-i18n="c10h">A tray that shows the theme</h3>
         </div>
-        <p>Sun icon by day, moon by night — the tray itself tells you which theme is on, with a live tooltip for what's next.</p>
+        <p data-i18n="c10p">Sun icon by day, moon by night — the tray itself tells you which theme is on, with a live tooltip for what's next.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg></span>
-          <h3>Stays out of the way</h3>
+          <h3 data-i18n="c11h">Stays out of the way</h3>
         </div>
-        <p>Theme-aware tray icon with a live status tooltip, autostart, single instance. About 11 MB on disk, ~0% CPU idle.</p>
+        <p data-i18n="c11p">Theme-aware tray icon with a live status tooltip, autostart, single instance. About 11 MB on disk, ~0% CPU idle.</p>
       </article>
       <article class="bcard reveal">
         <div class="bcard-top">
           <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-          <h3>Private by construction</h3>
+          <h3 data-i18n="c12h">Private by construction</h3>
         </div>
-        <p>Everything lives in a local config file. The network is touched only when you press a button.</p>
+        <p data-i18n="c12p">Everything lives in a local config file. The network is touched only when you press a button.</p>
       </article>
     </div>
   </section>
 
   <section>
-    <h2 class="display">Up and running in a minute</h2>
-    <p class="section-sub">No installer, no wizard, no account.</p>
+    <h2 class="display reveal" data-i18n="steps_h">Up and running in a minute</h2>
+    <p class="section-sub reveal" data-i18n="steps_sub">No installer, no wizard, no account.</p>
     <div class="steps">
       <div class="step">
         <div class="step-num display">1</div>
-        <p><b>Download</b> the .exe above and run it.</p>
+        <p data-i18n="s1"><b>Download</b> the .exe above and run it.</p>
       </div>
       <div class="step">
         <div class="step-num display">2</div>
-        <p><b>Enable auto-switch</b> and pick time or sunrise mode.</p>
+        <p data-i18n="s2"><b>Enable auto-switch</b> and pick time or sunrise mode.</p>
       </div>
       <div class="step">
         <div class="step-num display">3</div>
-        <p><b>Apply.</b> It moves to your tray from here.</p>
+        <p data-i18n="s3"><b>Apply.</b> It moves to your tray from here.</p>
       </div>
     </div>
   </section>
 
-  <footer>
-    <span>WinThemeAuto · MIT license</span>
+  <footer class="reveal">
+    <span data-i18n="foot">WinThemeAuto · MIT license</span>
     <nav>
       <a href="https://github.com/alnyx-dev/WinThemeAuto">GitHub</a>
-      <a href="https://github.com/alnyx-dev/WinThemeAuto/releases">All releases</a>
+      <a href="https://github.com/alnyx-dev/WinThemeAuto/releases" data-i18n="allrel">All releases</a>
     </nav>
   </footer>
 
@@ -556,12 +615,22 @@
 <script>
 (function () {
   var REPO = "alnyx-dev/WinThemeAuto";
+  var is32 = false;
   try {
     var ua = navigator.userAgent || "";
-    if (/WOW64|Win32/.test(ua) && !/Win64|x64/.test(ua)) {
-      document.getElementById("rec-note").textContent = "32-bit recommended for this PC";
-    }
+    if (/WOW64|Win32/.test(ua) && !/Win64|x64/.test(ua)) is32 = true;
   } catch (e) { /* keep defaults */ }
+  function renderRecNote() {
+    var el = document.getElementById("rec-note");
+    if (el) el.textContent = is32 ? T("rec32") : T("rec64");
+  }
+
+  var metaBits = [];
+  function renderMeta() {
+    var el = document.getElementById("meta");
+    if (!el) return;
+    el.textContent = T("meta_base") + metaBits.join(" · ");
+  }
 
   function fmtMB(bytes) {
     if (!bytes) return "";
@@ -599,15 +668,15 @@
     var now = new Date();
     var today = sunEvents(lat, lon, now.getFullYear(), now.getMonth() + 1, now.getDate());
     if (today.polar) {
-      return today.polar === "day" ? "light all day — polar day" : "dark all day — polar night";
+      return today.polar === "day" ? T("sw_pday") : T("sw_pnight");
     }
     var t = now.getTime();
-    if (t < today.rise) return "light at " + fmtHM(today.rise);
-    if (t < today.set) return "dark at " + fmtHM(today.set);
+    if (t < today.rise) return T("sw_light") + fmtHM(today.rise);
+    if (t < today.set) return T("sw_dark") + fmtHM(today.set);
     var tm = new Date(t + 864e5);
     var next = sunEvents(lat, lon, tm.getFullYear(), tm.getMonth() + 1, tm.getDate());
-    if (next.polar || !next.rise) return "light at " + fmtHM(today.rise);
-    return "light at " + fmtHM(next.rise);
+    if (next.polar || !next.rise) return T("sw_light") + fmtHM(today.rise);
+    return T("sw_light") + fmtHM(next.rise);
   }
 
   // Silent IP geolocation (no permission prompt), then a real preview.
@@ -627,6 +696,126 @@
     });
   }
 
+  // Site language: EN/RU dictionary, switched with the same sliding pill.
+  // Choice persists in localStorage, default follows the browser.
+  var STR = {
+    en: {
+      title: "WinThemeAuto — Windows themes on autopilot",
+      theme_system: "System", theme_light: "Light", theme_dark: "Dark",
+      theme_aria: "Site color theme", lang_aria: "Site language",
+      eyebrow: 'Free · Open source · <b>Portable</b>',
+      h1: 'Day and night,<br>handled <span class="sun">by the sun.</span>',
+      lede: "WinThemeAuto switches Windows between light and dark themes on your schedule — or follows real sunrise and sunset. One small exe, living quietly in your tray.",
+      dl: "Download for Windows", dl32: "32-bit build",
+      rec64: "64-bit recommended", rec32: "32-bit recommended for this PC",
+      meta_base: "Single portable .exe — no installer, no admin rights. ",
+      dl_count: "downloads",
+      chip_on: "Auto-switch on", chip_loc: "locating…", chip_next: "Next: ",
+      chip_fallback: "follows the sun",
+      chip_for: "For ", chip_somewhere: "For your location",
+      sw_light: "light at ", sw_dark: "dark at ",
+      sw_pday: "light all day — polar day", sw_pnight: "dark all day — polar night",
+      why_h: "Why it earns its tray slot",
+      why_sub: "Everything the big theme tools do, minus the installer, the service and the account.",
+      c1h: "Time or sun, your call",
+      c1p: "Fixed hours with overnight ranges, or offline sunrise/sunset math for your coordinates with minute offsets.",
+      c2h: "Full themes, not just flags",
+      c2p: "Point it at installed light and dark .theme files — or any two images — and the wallpaper changes along, silently, no flashing windows.",
+      c3h: "Accent follows the theme",
+      c3p: "One accent color for day, another for night — picked from swatches in a click and applied with every switch.",
+      c4h: "Finds your sun in one click",
+      c4p: "Detect fills your coordinates from IP once — every sunrise after that is computed offline, on your machine.",
+      c5h: "Apps and system, separately",
+      c5p: "Dark apps with a light taskbar? Light apps after dark? Mix however you like.",
+      c6h: "Updates itself",
+      c6p: "One click checks GitHub Releases, verifies the SHA256 checksum, swaps the exe and restarts. Settings survive.",
+      c7h: "Scriptable",
+      c7p: "Headless --toggle, --light, --dark and --status flags for hotkeys, schedulers and scripts.",
+      c8h: "Speaks your language",
+      c8p: "Full English and Russian interface with one-click switching — every label, error, tray hint and sunrise caption.",
+      c9h: "Manual override that sticks",
+      c9p: "Hit Switch in the middle of the day and the manual theme holds until the next scheduled change — no more snap-back within seconds.",
+      c10h: "A tray that shows the theme",
+      c10p: "Sun icon by day, moon by night — the tray itself tells you which theme is on, with a live tooltip for what's next.",
+      c11h: "Stays out of the way",
+      c11p: "Theme-aware tray icon with a live status tooltip, autostart, single instance. About 11 MB on disk, ~0% CPU idle.",
+      c12h: "Private by construction",
+      c12p: "Everything lives in a local config file. The network is touched only when you press a button.",
+      steps_h: "Up and running in a minute",
+      steps_sub: "No installer, no wizard, no account.",
+      s1: "<b>Download</b> the .exe above and run it.",
+      s2: "<b>Enable auto-switch</b> and pick time or sunrise mode.",
+      s3: "<b>Apply.</b> It moves to your tray from here.",
+      foot: "WinThemeAuto · MIT license", allrel: "All releases"
+    },
+    ru: {
+      title: "WinThemeAuto — темы Windows на автопилоте",
+      theme_system: "Система", theme_light: "Светлая", theme_dark: "Тёмная",
+      theme_aria: "Тема сайта", lang_aria: "Язык сайта",
+      eyebrow: "Бесплатно · Open source · <b>Портативно</b>",
+      h1: 'День и ночь —<br><span class="sun">по солнцу.</span>',
+      lede: "WinThemeAuto переключает Windows между светлой и тёмной темами по расписанию — или следит за реальными восходом и закатом. Один маленький exe тихо живёт в трее.",
+      dl: "Скачать для Windows", dl32: "32-битная сборка",
+      rec64: "64-bit рекомендуется", rec32: "этому ПК нужен 32-bit",
+      meta_base: "Один портативный .exe — без установщика и прав админа. ",
+      dl_count: "загрузок",
+      chip_on: "Автопереключение вкл", chip_loc: "определение…", chip_next: "Далее: ",
+      chip_fallback: "следит за солнцем",
+      chip_for: "Для ", chip_somewhere: "Для вашего местоположения",
+      sw_light: "светлая в ", sw_dark: "тёмная в ",
+      sw_pday: "светлая весь день — полярный день", sw_pnight: "тёмная всю ночь — полярная ночь",
+      why_h: "Почему ему место в трее",
+      why_sub: "Всё, что умеют большие переключатели тем, минус установщик, служба и аккаунт.",
+      c1h: "Время или солнце — как скажешь",
+      c1p: "Фиксированные часы с ночными диапазонами или офлайн-математика восхода и заката для ваших координат с минутными сдвигами.",
+      c2h: "Полные темы, а не только флаги",
+      c2p: "Укажите светлый и тёмный .theme-файлы — или любые две картинки — и обои переключатся вместе, тихо, без мигающих окон.",
+      c3h: "Акцент следует за темой",
+      c3p: "Один цвет акцента для дня, другой для ночи — выбираются из палитры в клик и применяются при каждом переключении.",
+      c4h: "Найдёт ваше солнце в один клик",
+      c4p: "Detect подставит координаты по IP один раз — каждый следующий восход считается офлайн, на вашей машине.",
+      c5h: "Приложения и система — раздельно",
+      c5p: "Тёмные приложения со светлой панелью? Светлые приложения после заката? Комбинируйте как хотите.",
+      c6h: "Обновляется сам",
+      c6p: "Один клик проверяет GitHub Releases, сверяет SHA256, меняет exe и перезапускается. Настройки целы.",
+      c7h: "Для скриптов",
+      c7p: "Флаги --toggle, --light, --dark и --status без окна — для хоткеев, планировщика и скриптов.",
+      c8h: "Говорит на вашем языке",
+      c8p: "Полный английский и русский интерфейс с переключением в клик — каждая подпись, ошибка, подсказка трея и строка восхода.",
+      c9h: "Ручное переключение держится",
+      c9p: "Нажмите Switch среди дня — ручная тема держится до следующего планового переключения, а не слетает через пять секунд.",
+      c10h: "Трей показывает тему",
+      c10p: "Иконка-солнце днём, луна ночью — сам трей говорит, какая тема включена, а живой тултип — что дальше.",
+      c11h: "Не мешается",
+      c11p: "Тематическая иконка трея с живым тултипом статуса, автозапуск, один экземпляр. Около 11 МБ на диске, ~0% CPU в простое.",
+      c12h: "Приватность по построению",
+      c12p: "Всё живёт в локальном файле настроек. Сеть трогается только когда вы нажимаете кнопку.",
+      steps_h: "Запуск за минуту",
+      steps_sub: "Без установщика, мастера и аккаунта.",
+      s1: "<b>Скачайте</b> .exe выше и запустите.",
+      s2: "<b>Включите авто</b> и выберите время или режим солнца.",
+      s3: "<b>Применить.</b> Дальше он живёт в трее.",
+      foot: "WinThemeAuto · лицензия MIT", allrel: "Все релизы"
+    }
+  };
+  var siteLang = "en";
+  function T(key) { return (STR[siteLang] && STR[siteLang][key]) || STR.en[key] || ""; }
+
+  // Equal-height bento cards: measure the tallest, pin the rest to it.
+  // Re-runs on language switch, resize and font load (lengths change).
+  function equalize() {
+    var cards = document.querySelectorAll(".bcard");
+    for (var i = 0; i < cards.length; i++) cards[i].style.minHeight = "";
+    if (window.innerWidth <= 760) return;
+    var max = 0;
+    for (var j = 0; j < cards.length; j++) {
+      if (cards[j].offsetHeight > max) max = cards[j].offsetHeight;
+    }
+    if (max > 0) {
+      for (var k = 0; k < cards.length; k++) cards[k].style.minHeight = max + "px";
+    }
+  }
+
   // Site theme: System follows the OS live, Light/Dark pin it.
   // Choice persists in localStorage.
   var osDark = null;
@@ -634,56 +823,98 @@
   function systemTheme() {
     return (osDark && osDark.matches) ? "dark" : "light";
   }
-  function siteChoice() {
-    try {
-      var c = localStorage.getItem("wta-site-theme");
-      if (c === "system" || c === "light" || c === "dark") return c;
-    } catch (e) {}
-    return "system";
+  function segButtons(seg, fn) {
+    var btns = seg.querySelectorAll("button");
+    for (var i = 0; i < btns.length; i++) fn(btns[i]);
   }
-  function movePill(choice) {
-    var pill = document.getElementById("seg-pill");
+  function movePill(seg) {
+    var pill = seg.querySelector(".seg-pill");
     if (!pill) return;
-    var btns = document.querySelectorAll(".seg button");
+    var want = seg.getAttribute("data-value");
     var active = null;
-    for (var i = 0; i < btns.length; i++) {
-      if (btns[i].getAttribute("data-mode") === choice) { active = btns[i]; break; }
-    }
+    segButtons(seg, function (b) {
+      if (b.getAttribute("data-val") === want) active = b;
+    });
     if (!active || !active.offsetWidth) return;
     pill.style.left = active.offsetLeft + "px";
     pill.style.width = active.offsetWidth + "px";
     pill.classList.add("show");
   }
-  function markSeg(choice) {
-    var btns = document.querySelectorAll(".seg button");
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle("on", btns[i].getAttribute("data-mode") === choice);
-    }
-    movePill(choice);
+  function markSeg(seg) {
+    var want = seg.getAttribute("data-value");
+    segButtons(seg, function (b) {
+      b.classList.toggle("on", b.getAttribute("data-val") === want);
+    });
+    movePill(seg);
   }
+  function moveAllPills() {
+    var segs = document.querySelectorAll(".seg");
+    for (var i = 0; i < segs.length; i++) movePill(segs[i]);
+  }
+  function applyLang(L) {
+    siteLang = L;
+    swapLang();
+  }
+  function swapLang() {
+    try { document.documentElement.lang = siteLang; } catch (e) {}
+    document.title = T("title");
+    var els = document.querySelectorAll("[data-i18n]");
+    for (var i = 0; i < els.length; i++) {
+      els[i].innerHTML = T(els[i].getAttribute("data-i18n"));
+    }
+    var themeSeg = document.getElementById("seg-theme");
+    var langSeg = document.getElementById("seg-lang");
+    if (themeSeg) themeSeg.setAttribute("aria-label", T("theme_aria"));
+    if (langSeg) langSeg.setAttribute("aria-label", T("lang_aria"));
+    renderRecNote();
+    renderMeta();
+    refreshChip();
+    moveAllPills();
+    equalize();
+  }
+  function siteLangChoice() {
+    try {
+      var c = localStorage.getItem("wta-site-lang");
+      if (c === "en" || c === "ru") return c;
+    } catch (e) {}
+    try {
+      if ((navigator.language || "").toLowerCase().indexOf("ru") === 0) return "ru";
+    } catch (e2) {}
+    return "en";
+  }
+  function wireSeg(id, onPick) {
+    var seg = document.getElementById(id);
+    if (!seg) return;
+    segButtons(seg, function (b) {
+      b.addEventListener("click", function () {
+        seg.setAttribute("data-value", b.getAttribute("data-val"));
+        markSeg(seg);
+        onPick(b.getAttribute("data-val"));
+      });
+    });
+  }
+  wireSeg("seg-theme", function (v) {
+    try { localStorage.setItem("wta-site-theme", v); } catch (e) {}
+    refreshSiteTheme();
+  });
+  wireSeg("seg-lang", function (v) {
+    try { localStorage.setItem("wta-site-lang", v); } catch (e) {}
+    applyLang(v);
+  });
+  window.addEventListener("resize", function () { moveAllPills(); equalize(); });
   function applySiteTheme(t) {
     document.documentElement.dataset.theme = t;
     try { document.documentElement.style.colorScheme = t; } catch (e) {}
   }
   function refreshSiteTheme() {
-    var c = siteChoice();
+    var seg = document.getElementById("seg-theme");
+    var c = seg ? seg.getAttribute("data-value") : "system";
     applySiteTheme(c === "system" ? systemTheme() : c);
-    markSeg(c);
+    if (seg) markSeg(seg);
   }
-  (function wireSeg() {
-    var btns = document.querySelectorAll(".seg button");
-    for (var i = 0; i < btns.length; i++) {
-      (function (b) {
-        b.addEventListener("click", function () {
-          try { localStorage.setItem("wta-site-theme", b.getAttribute("data-mode")); } catch (e) {}
-          refreshSiteTheme();
-        });
-      })(btns[i]);
-    }
-  })();
-  window.addEventListener("resize", function () { movePill(siteChoice()); });
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(function () { movePill(siteChoice()); });
+  function siteChoice() {
+    var seg = document.getElementById("seg-theme");
+    return seg ? seg.getAttribute("data-value") : "system";
   }
   function watchSystem() {
     if (!osDark) return;
@@ -692,16 +923,46 @@
     else if (osDark.addListener) osDark.addListener(onChange);
   }
   watchSystem();
-  refreshSiteTheme();
+  (function initPrefs() {
+    try {
+      var t = localStorage.getItem("wta-site-theme");
+      if (t === "system" || t === "light" || t === "dark") {
+        var tseg = document.getElementById("seg-theme");
+        if (tseg) tseg.setAttribute("data-value", t);
+      }
+    } catch (e) {}
+    var lang = siteLangChoice();
+    var lseg = document.getElementById("seg-lang");
+    if (lseg) {
+      lseg.setAttribute("data-value", lang);
+      markSeg(lseg);
+    }
+    refreshSiteTheme();
+    applyLang(lang);
+  })();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { moveAllPills(); equalize(); });
+  }
+  window.addEventListener("load", function () { moveAllPills(); equalize(); });
 
+  var chipLoc = null;
   var chip = document.getElementById("chip-text");
-  chip.textContent = "locating…";
-  locate().then(function (loc) {
-    chip.textContent = "Next: " + nextSwitchText(loc.lat, loc.lon);
+  function refreshChip() {
+    if (!chip) return;
+    if (!chipLoc) {
+      chip.textContent = T("chip_loc");
+      return;
+    }
+    chip.textContent = T("chip_next") + nextSwitchText(chipLoc.lat, chipLoc.lon);
     var chipBox = chip.closest(".live-chip");
-    if (chipBox) chipBox.title = loc.place ? "For " + loc.place : "For your location";
+    if (chipBox) chipBox.title = chipLoc.place ? T("chip_for") + chipLoc.place : T("chip_somewhere");
+  }
+  refreshChip();
+  locate().then(function (loc) {
+    chipLoc = loc;
+    refreshChip();
   }).catch(function () {
-    chip.textContent = "follows the sun";
+    if (chip) chip.textContent = T("chip_fallback");
   });
 
   fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
@@ -723,11 +984,9 @@
       var bits = [];
       if (x64) bits.push(fmtMB(x64.size));
       var total = assets.reduce(function (s, a) { return s + (a.download_count || 0); }, 0);
-      if (total) bits.push(total + " downloads");
-      if (bits.length) {
-        document.getElementById("meta").textContent =
-          "Single portable .exe — no installer, no admin rights. " + bits.join(" · ");
-      }
+      if (total) bits.push(total + " " + T("dl_count"));
+      metaBits = bits;
+      renderMeta();
     })
     .catch(function () { /* static fallback links keep working */ });
 
@@ -745,7 +1004,8 @@
     }
   })();
 
-  // Reveal-on-scroll for cards and steps.
+  // Reveal-on-scroll for headers, cards, steps and footer — siblings
+  // cascade one after another instead of popping at once.
   (function reveal() {
     var reduce = false;
     try { reduce = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
@@ -754,13 +1014,27 @@
       for (var i = 0; i < els.length; i++) els[i].classList.add("in");
       return;
     }
-    for (var j = 0; j < els.length; j++) els[j].classList.add("reveal");
+    for (var j = 0; j < els.length; j++) {
+      els[j].classList.add("reveal");
+      var sibs = els[j].parentNode ? els[j].parentNode.children : [];
+      var k = 0;
+      for (var s = 0; s < sibs.length; s++) {
+        if (sibs[s] === els[j]) { k = s; break; }
+      }
+      els[j].style.transitionDelay = Math.min(k, 6) * 80 + "ms";
+    }
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
-        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+          (function (el) {
+            setTimeout(function () { el.style.transitionDelay = ""; }, 1300);
+          })(en.target);
+        }
       });
     }, { threshold: 0.12 });
-    for (var k = 0; k < els.length; k++) io.observe(els[k]);
+    for (var m = 0; m < els.length; m++) io.observe(els[m]);
   })();
 })();
 </script>
