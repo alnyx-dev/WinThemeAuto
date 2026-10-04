@@ -70,16 +70,19 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 pub fn check() -> Result<UpdateInfo> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(15))
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(15)))
         .build();
+    let agent = ureq::Agent::new_with_config(config);
     let body = agent
         .get(API_URL)
-        .set("User-Agent", &user_agent())
-        .set("Accept", "application/vnd.github+json")
+        .header("User-Agent", &user_agent())
+        .header("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| anyhow::anyhow!("update check failed: {e}"))?
-        .into_string()?;
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| anyhow::anyhow!("update check failed: {e}"))?;
 
     let rel: Release = serde_json::from_str(&body).context("cannot parse release info")?;
     let want = asset_name();
@@ -127,10 +130,12 @@ fn parse_digest(digest: &str) -> Option<&str> {
 fn fetch_sha256(agent: &ureq::Agent, url: &str) -> Result<String> {
     let body = agent
         .get(url)
-        .set("User-Agent", &user_agent())
+        .header("User-Agent", &user_agent())
         .call()
         .map_err(|e| anyhow::anyhow!("checksum download failed: {e}"))?
-        .into_string()?;
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| anyhow::anyhow!("checksum download failed: {e}"))?;
     let hex = body.split_whitespace().next().unwrap_or("").to_lowercase();
     if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         Ok(hex)
@@ -174,20 +179,25 @@ pub fn download(
     on_progress: impl Fn(u64, Option<u64>),
 ) -> Result<PathBuf> {
     use std::sync::atomic::Ordering;
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(180))
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(180)))
         .build();
-    let resp = agent
+    let agent = ureq::Agent::new_with_config(config);
+    let mut resp = agent
         .get(&info.download_url)
-        .set("User-Agent", &user_agent())
+        .header("User-Agent", &user_agent())
         .call()
         .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
 
-    let total: Option<u64> = resp.header("Content-Length").and_then(|v| v.parse().ok());
+    let total: Option<u64> = resp
+        .headers()
+        .get("Content-Length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok());
 
     let dest = std::env::temp_dir().join("WinThemeAuto-update.exe");
     let mut file = std::fs::File::create(&dest)?;
-    let mut reader = resp.into_reader();
+    let mut reader = resp.body_mut().as_reader();
     let mut buf = [0u8; 16384];
     let mut done: u64 = 0;
     loop {
@@ -392,7 +402,7 @@ mod tests {
         assert!(body.contains(
             r#"move /Y "C:\Temp\WinThemeAuto-update.exe" "C:\Apps\WinThemeAuto-x64.exe""#
         ));
-        for a in [&"--tray", &"--extra", "\"a b\""] {
+        for a in ["--tray", "--extra", "\"a b\""] {
             assert!(body.contains(a), "missing {a}");
         }
         let starts: Vec<&str> = body

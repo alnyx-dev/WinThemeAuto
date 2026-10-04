@@ -4,7 +4,7 @@ use crate::{
     sun::{self, Sun},
     theme::Theme,
 };
-use chrono::{DateTime, Duration, Local, LocalResult, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Duration, Local, LocalResult, NaiveDate, NaiveTime, TimeZone, Utc};
 
 pub fn theme_for(now: NaiveTime, light_at: NaiveTime, dark_at: NaiveTime) -> Theme {
     let is_light = if light_at <= dark_at {
@@ -99,106 +99,141 @@ pub fn sun_info(cfg: &Config, date: NaiveDate) -> String {
     }
 }
 
+pub struct NextSwitch {
+    pub dark: bool,
+    pub at: DateTime<Local>,
+}
+
+pub fn hold_active(cfg: &Config, want: Theme, now: DateTime<Local>) -> bool {
+    matches!(
+        (cfg.manual_hold, cfg.manual_hold_until),
+        (Some(held), until) if held != want && until.map(|u| now < u).unwrap_or(true)
+    )
+}
+
+pub fn next_switch(cfg: &Config, now: DateTime<Local>) -> Option<NextSwitch> {
+    if !cfg.auto_enabled {
+        return None;
+    }
+    if !cfg.change_apps && !cfg.change_system {
+        return None;
+    }
+    match cfg.mode {
+        Mode::Fixed => {
+            let (light_t, dark_t) = (cfg.light_at, cfg.dark_at);
+            if light_t == dark_t {
+                return None;
+            }
+            let current = theme_for(now.time(), light_t, dark_t);
+            let (dark, next_t) = if current == Theme::Light {
+                (true, dark_t)
+            } else {
+                (false, light_t)
+            };
+            Some(NextSwitch {
+                dark,
+                at: resolve_target(now, next_t),
+            })
+        }
+        Mode::Sun => {
+            let (lat, lon) = coords(cfg)?;
+            let today = now.date_naive();
+            let t = now.time();
+            match day_times(cfg, today) {
+                None => {
+                    let polar_day = matches!(sun::sun_events(lat, lon, today), Sun::PolarDay);
+                    let tomorrow = today.succ_opt().unwrap_or(today);
+                    let (l2, d2) = day_times(cfg, tomorrow)?;
+                    let (dark, next_t) = if polar_day { (true, d2) } else { (false, l2) };
+                    Some(NextSwitch {
+                        dark,
+                        at: resolve_target(now, next_t),
+                    })
+                }
+                Some((light_t, dark_t)) => {
+                    if light_t == dark_t {
+                        return None;
+                    }
+                    let current = theme_for(t, light_t, dark_t);
+                    if current == Theme::Light || t < light_t {
+                        let (dark, next_t) = if current == Theme::Light {
+                            (true, dark_t)
+                        } else {
+                            (false, light_t)
+                        };
+                        Some(NextSwitch {
+                            dark,
+                            at: resolve_target(now, next_t),
+                        })
+                    } else {
+                        let tomorrow = today.succ_opt().unwrap_or(today);
+                        if let Some((l2, _)) = day_times(cfg, tomorrow) {
+                            Some(NextSwitch {
+                                dark: false,
+                                at: resolve_target(now, l2),
+                            })
+                        } else {
+                            let (dark, next_t) = if current == Theme::Light {
+                                (true, dark_t)
+                            } else {
+                                (false, light_t)
+                            };
+                            Some(NextSwitch {
+                                dark,
+                                at: resolve_target(now, next_t),
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn next_switch_info(cfg: &Config, now: DateTime<Local>) -> String {
+    if let Some(sw) = next_switch(cfg, now) {
+        let lang = lang_of(cfg);
+        let name = i18n::next_theme_word(lang, sw.dark);
+        let mins = (sw.at - now).num_minutes().max(0);
+        let when = if mins == 0 {
+            match lang {
+                Lang::En => "now".to_string(),
+                Lang::Ru => "сейчас".to_string(),
+            }
+        } else {
+            match lang {
+                Lang::En => format!("in {}", i18n::duration_hm(lang, mins)),
+                Lang::Ru => format!("через {}", i18n::duration_hm(lang, mins)),
+            }
+        };
+        return match lang {
+            Lang::En => format!("Next: {} at {} ({})", name, hm(sw.at.time()), when),
+            Lang::Ru => format!("Далее: {} в {} ({})", name, hm(sw.at.time()), when),
+        };
+    }
     if !cfg.auto_enabled {
         return String::new();
     }
     if !cfg.change_apps && !cfg.change_system {
         return String::new();
     }
-    match cfg.mode {
-        Mode::Fixed => {
-            let (light_t, dark_t) = (cfg.light_at, cfg.dark_at);
-            if light_t == dark_t {
-                return String::new();
-            }
-            switch_string(lang_of(cfg), now, light_t, dark_t)
-        }
-        Mode::Sun => sun_next_switch(cfg, now),
+    if cfg.mode == Mode::Fixed {
+        return String::new();
     }
-}
-
-fn sun_next_switch(cfg: &Config, now: DateTime<Local>) -> String {
     let lang = lang_of(cfg);
     let Some((lat, lon)) = coords(cfg) else {
         return i18n::msg(lang, "need_coords_short", "");
     };
-    let today = now.date_naive();
-    let t = now.time();
-    let today_times = day_times(cfg, today);
-
-    match today_times {
-        None => {
-            let polar_day = matches!(sun::sun_events(lat, lon, today), Sun::PolarDay);
-            let tomorrow = today.succ_opt().unwrap_or(today);
-            if let Some((l2, d2)) = day_times(cfg, tomorrow) {
-                let (dark, light) = (
-                    i18n::next_theme_word(lang, true),
-                    i18n::next_theme_word(lang, false),
-                );
-                let (name, next_t, mins) = if polar_day {
-                    (dark, d2, mins_until(now, d2))
-                } else {
-                    (light, l2, mins_until(now, l2))
-                };
-                return match lang {
-                    Lang::En => format!(
-                        "Next: {} at {} (in {})",
-                        name,
-                        hm(next_t),
-                        i18n::duration_hm(lang, mins)
-                    ),
-                    Lang::Ru => format!(
-                        "Далее: {} в {} (через {})",
-                        name,
-                        hm(next_t),
-                        i18n::duration_hm(lang, mins)
-                    ),
-                };
-            }
-            if polar_day {
-                match lang {
-                    Lang::En => "Polar day — stays light (sun never sets)".into(),
-                    Lang::Ru => "Полярный день — остаётся светлая (солнце не заходит)".into(),
-                }
-            } else {
-                match lang {
-                    Lang::En => "Polar night — stays dark (sun never rises)".into(),
-                    Lang::Ru => "Полярная ночь — остаётся тёмная (солнце не восходит)".into(),
-                }
-            }
-        }
-        Some((light_t, dark_t)) => {
-            if light_t == dark_t {
-                return String::new();
-            }
-            let current = theme_for(t, light_t, dark_t);
-            if current == Theme::Light || t < light_t {
-                switch_string(lang, now, light_t, dark_t)
-            } else {
-                let tomorrow = today.succ_opt().unwrap_or(today);
-                if let Some((l2, _)) = day_times(cfg, tomorrow) {
-                    let mins = mins_until(now, l2);
-                    let light = i18n::next_theme_word(lang, false);
-                    let when = if mins == 0 {
-                        match lang {
-                            Lang::En => "now".to_string(),
-                            Lang::Ru => "сейчас".to_string(),
-                        }
-                    } else {
-                        match lang {
-                            Lang::En => format!("in {}", i18n::duration_hm(lang, mins)),
-                            Lang::Ru => format!("через {}", i18n::duration_hm(lang, mins)),
-                        }
-                    };
-                    return match lang {
-                        Lang::En => format!("Next: {light} at {} ({when})", hm(l2)),
-                        Lang::Ru => format!("Далее: {light} в {} ({when})", hm(l2)),
-                    };
-                }
-                switch_string(lang, now, light_t, dark_t)
-            }
-        }
+    match sun::sun_events(lat, lon, now.date_naive()) {
+        Sun::PolarDay => match lang {
+            Lang::En => "Polar day — stays light (sun never sets)".into(),
+            Lang::Ru => "Полярный день — остаётся светлая (солнце не заходит)".into(),
+        },
+        Sun::PolarNight => match lang {
+            Lang::En => "Polar night — stays dark (sun never rises)".into(),
+            Lang::Ru => "Полярная ночь — остаётся тёмная (солнце не восходит)".into(),
+        },
+        Sun::Normal { .. } => String::new(),
     }
 }
 
@@ -221,53 +256,31 @@ fn day_times(cfg: &Config, date: NaiveDate) -> Option<(NaiveTime, NaiveTime)> {
 }
 
 fn resolve_target(now: DateTime<Local>, next_t: NaiveTime) -> DateTime<Local> {
+    resolve_target_in(now, next_t)
+}
+
+fn resolve_target_in<Tz: TimeZone>(now: DateTime<Tz>, next_t: NaiveTime) -> DateTime<Tz> {
     let date = now.date_naive();
-    if let LocalResult::Single(dt) = date.and_time(next_t).and_local_timezone(Local) {
-        if dt > now {
-            return dt;
+    let tz = now.timezone();
+    match date.and_time(next_t).and_local_timezone(tz.clone()) {
+        LocalResult::Single(dt) if dt > now => return dt,
+        // Fall-back day: the wall time happens twice — take whichever
+        // occurrence is still upcoming.
+        LocalResult::Ambiguous(first, second) => {
+            if first > now {
+                return first;
+            }
+            if second > now {
+                return second;
+            }
         }
+        _ => {}
     }
     let tomorrow = date.succ_opt().unwrap_or(date);
-    match tomorrow.and_time(next_t).and_local_timezone(Local) {
+    match tomorrow.and_time(next_t).and_local_timezone(tz.clone()) {
         LocalResult::Single(dt) => dt,
         LocalResult::Ambiguous(first, _) => first,
         LocalResult::None => now,
-    }
-}
-
-fn mins_until(now: DateTime<Local>, next_t: NaiveTime) -> i64 {
-    (resolve_target(now, next_t) - now).num_minutes().max(0)
-}
-
-fn switch_string(
-    lang: Lang,
-    now: DateTime<Local>,
-    light_t: NaiveTime,
-    dark_t: NaiveTime,
-) -> String {
-    let t = now.time();
-    let current = theme_for(t, light_t, dark_t);
-    let (next_dark, next_t) = if current == Theme::Light {
-        (true, dark_t)
-    } else {
-        (false, light_t)
-    };
-    let name = i18n::next_theme_word(lang, next_dark);
-    let mins = mins_until(now, next_t);
-    let when = if mins == 0 {
-        match lang {
-            Lang::En => "now".to_string(),
-            Lang::Ru => "сейчас".to_string(),
-        }
-    } else {
-        match lang {
-            Lang::En => format!("in {}", i18n::duration_hm(lang, mins)),
-            Lang::Ru => format!("через {}", i18n::duration_hm(lang, mins)),
-        }
-    };
-    match lang {
-        Lang::En => format!("Next: {} at {} ({})", name, hm(next_t), when),
-        Lang::Ru => format!("Далее: {} в {} ({})", name, hm(next_t), when),
     }
 }
 
@@ -287,6 +300,103 @@ mod tests {
 
     fn t(h: u32, m: u32) -> NaiveTime {
         NaiveTime::from_hms_opt(h, m, 0).unwrap()
+    }
+
+    fn minute(m: u32) -> NaiveTime {
+        NaiveTime::from_hms_opt(m / 60, m % 60, 0).unwrap()
+    }
+
+    #[test]
+    fn switches_only_at_boundaries() {
+        // Walk every minute over 48 h: the theme may only flip exactly at
+        // light_at / dark_at, twice per day.
+        for (lh, lm, dh, dm) in [
+            (7, 0, 19, 0),
+            (20, 0, 6, 0),
+            (0, 0, 0, 1),
+            (23, 30, 23, 31),
+            (0, 0, 12, 0),
+            (12, 0, 0, 0),
+        ] {
+            let (l, d) = (t(lh, lm), t(dh, dm));
+            if l == d {
+                for m in 0..1440 {
+                    assert_eq!(theme_for(minute(m), l, d), Theme::Dark);
+                }
+                continue;
+            }
+            assert_eq!(theme_for(l, l, d), Theme::Light);
+            assert_eq!(theme_for(d, l, d), Theme::Dark);
+            let (lm, dm) = (lh * 60 + lm, dh * 60 + dm);
+            let mut expected = vec![lm, dm, lm + 1440, dm + 1440];
+            expected.retain(|&m| m != 0);
+            expected.sort_unstable();
+            let mut changes = vec![];
+            let mut prev = theme_for(minute(0), l, d);
+            for m in 1..2880 {
+                let cur = theme_for(minute(m % 1440), l, d);
+                if cur != prev {
+                    changes.push(m);
+                    prev = cur;
+                }
+            }
+            assert_eq!(changes, expected, "bounds {l:?} {d:?}");
+        }
+    }
+
+    mod dst {
+        use super::resolve_target_in;
+        use chrono::{LocalResult, NaiveDate, NaiveTime};
+        use chrono_tz::America::New_York;
+
+        fn at(y: i32, mo: u32, d: u32, h: u32, m: u32) -> chrono::DateTime<chrono_tz::Tz> {
+            let date = NaiveDate::from_ymd_opt(y, mo, d).unwrap();
+            let time = NaiveTime::from_hms_opt(h, m, 0).unwrap();
+            match date.and_time(time).and_local_timezone(New_York) {
+                LocalResult::Single(dt) => dt,
+                LocalResult::Ambiguous(first, _) => first,
+                LocalResult::None => panic!("test time does not exist"),
+            }
+        }
+
+        #[test]
+        fn spring_forward_skips_missing_time() {
+            // 2024-03-10: 02:00–03:00 does not exist in New York.
+            let now = at(2024, 3, 10, 0, 30);
+            let next = resolve_target_in(now, NaiveTime::from_hms_opt(2, 30, 0).unwrap());
+            assert_eq!(
+                next.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 3, 11).unwrap()
+            );
+            assert_eq!(next.format("%H:%M%:z").to_string(), "02:30-04:00");
+        }
+
+        #[test]
+        fn fall_back_takes_first_occurrence() {
+            // 2024-11-03: 01:30 happens twice; the EDT one comes first.
+            let now = at(2024, 11, 3, 0, 30);
+            let next = resolve_target_in(now, NaiveTime::from_hms_opt(1, 30, 0).unwrap());
+            assert_eq!(
+                next.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 11, 3).unwrap()
+            );
+            assert_eq!(next.format("%H:%M%:z").to_string(), "01:30-04:00");
+            // Between the two occurrences the second (EST) one is next.
+            let between = next + chrono::Duration::minutes(30);
+            let second = resolve_target_in(between, NaiveTime::from_hms_opt(1, 30, 0).unwrap());
+            assert_eq!(
+                second.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 11, 3).unwrap()
+            );
+            assert_eq!(second.format("%H:%M%:z").to_string(), "01:30-05:00");
+            // Once both have passed, it rolls over to the next day.
+            let past = second + chrono::Duration::minutes(1);
+            let rolled = resolve_target_in(past, NaiveTime::from_hms_opt(1, 30, 0).unwrap());
+            assert_eq!(
+                rolled.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 11, 4).unwrap()
+            );
+        }
     }
 
     #[test]
@@ -375,5 +485,30 @@ mod tests {
         let now = dt(12, 0);
         assert!(desired_theme(&c, now).is_some());
         assert!(!sun_info(&c, now.date_naive()).contains("Enter coordinates"));
+    }
+
+    #[test]
+    fn hold_honored_until_expiry_or_agreement() {
+        let now = dt(12, 0);
+        let later = now + Duration::hours(2);
+        let past = now - Duration::hours(2);
+        let mut c = cfg_fixed(true, t(7, 0), t(19, 0));
+        // At noon the schedule wants light; a dark hold is honored.
+        c.manual_hold = Some(Theme::Dark);
+        c.manual_hold_until = Some(later);
+        assert!(hold_active(&c, Theme::Light, now));
+        // Hold for the scheduled theme itself is not a hold.
+        c.manual_hold = Some(Theme::Light);
+        assert!(!hold_active(&c, Theme::Light, now));
+        // Expired hold is not honored.
+        c.manual_hold = Some(Theme::Dark);
+        c.manual_hold_until = Some(past);
+        assert!(!hold_active(&c, Theme::Light, now));
+        // Missing expiry means indefinite hold.
+        c.manual_hold_until = None;
+        assert!(hold_active(&c, Theme::Light, now));
+        // No hold at all.
+        c.manual_hold = None;
+        assert!(!hold_active(&c, Theme::Light, now));
     }
 }

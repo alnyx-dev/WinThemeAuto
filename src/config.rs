@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
-use chrono::NaiveTime;
+use chrono::{DateTime, Local, NaiveTime};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use crate::theme::Theme;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Mode {
@@ -32,6 +34,8 @@ pub struct Config {
     pub dark_accent: String,
     pub language: String,
     pub close_hint_acked: bool,
+    pub manual_hold: Option<Theme>,
+    pub manual_hold_until: Option<DateTime<Local>>,
 }
 
 impl Default for Config {
@@ -56,6 +60,8 @@ impl Default for Config {
             dark_accent: "0078D4".to_string(),
             language: "en".to_string(),
             close_hint_acked: false,
+            manual_hold: None,
+            manual_hold_until: None,
         }
     }
 }
@@ -103,6 +109,17 @@ fn sanitize(cfg: &mut Config) {
     cfg.dark_at = truncate_secs(cfg.dark_at);
     let lang = crate::i18n::Lang::from_code(&cfg.language);
     cfg.language = lang.code().to_string();
+    if cfg
+        .manual_hold_until
+        .map(|u| u <= Local::now())
+        .unwrap_or(false)
+    {
+        cfg.manual_hold = None;
+        cfg.manual_hold_until = None;
+    }
+    if cfg.manual_hold.is_none() {
+        cfg.manual_hold_until = None;
+    }
 }
 
 fn truncate_secs(t: NaiveTime) -> NaiveTime {
@@ -189,6 +206,18 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     if let Some(b) = v.get("close_hint_acked").and_then(|x| x.as_bool()) {
         cfg.close_hint_acked = b;
     }
+    if let Some(s) = v.get("manual_hold").and_then(|x| x.as_str()) {
+        cfg.manual_hold = match s {
+            "Light" => Some(Theme::Light),
+            "Dark" => Some(Theme::Dark),
+            _ => None,
+        };
+    }
+    if let Some(s) = v.get("manual_hold_until").and_then(|x| x.as_str()) {
+        if let Ok(dt) = s.parse::<DateTime<Local>>() {
+            cfg.manual_hold_until = Some(dt);
+        }
+    }
     sanitize(&mut cfg);
     cfg
 }
@@ -220,6 +249,7 @@ impl Config {
         }
         let bak = unique_backup(&path);
         let _ = std::fs::rename(&path, &bak);
+        crate::log::warn(format!("config unparseable, moved to {}", bak.display()));
         Self::default()
     }
 
@@ -358,5 +388,38 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(r#"{"light_at":"07:00:45"}"#).unwrap();
         let c = from_value_merged(&v);
         assert_eq!(c.light_at.format("%H:%M:%S").to_string(), "07:00:00");
+    }
+
+    #[test]
+    fn hold_roundtrip_and_expiry() {
+        let future = (Local::now() + chrono::Duration::hours(2))
+            .format("%Y-%m-%dT%H:%M:%S%:z")
+            .to_string();
+        let v: serde_json::Value = serde_json::from_str(&format!(
+            r#"{{"manual_hold":"Dark","manual_hold_until":"{future}"}}"#
+        ))
+        .unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.manual_hold, Some(Theme::Dark));
+        assert!(c.manual_hold_until.is_some());
+
+        let past = (Local::now() - chrono::Duration::hours(2))
+            .format("%Y-%m-%dT%H:%M:%S%:z")
+            .to_string();
+        let v: serde_json::Value = serde_json::from_str(&format!(
+            r#"{{"manual_hold":"Light","manual_hold_until":"{past}"}}"#
+        ))
+        .unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.manual_hold, None);
+        assert_eq!(c.manual_hold_until, None);
+
+        let v: serde_json::Value = serde_json::from_str(r#"{"manual_hold":"Dark"}"#).unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.manual_hold, Some(Theme::Dark));
+        assert_eq!(c.manual_hold_until, None);
+
+        let v: serde_json::Value = serde_json::from_str(r#"{"manual_hold":"Neon"}"#).unwrap();
+        assert_eq!(from_value_merged(&v).manual_hold, None);
     }
 }

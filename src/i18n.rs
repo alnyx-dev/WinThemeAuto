@@ -81,6 +81,7 @@ pub struct UiStrings {
     pub releases: &'static str,
     pub onboard: &'static str,
     pub cancel: &'static str,
+    pub logs: &'static str,
 }
 
 pub fn ui(lang: Lang) -> UiStrings {
@@ -131,6 +132,7 @@ pub fn ui(lang: Lang) -> UiStrings {
             releases: "Releases",
             onboard: "Turn on Auto switch, pick a mode, press Apply",
             cancel: "Cancel",
+            logs: "Logs",
         },
         Lang::Ru => UiStrings {
             tab_auto: "Автопереключение",
@@ -178,6 +180,7 @@ pub fn ui(lang: Lang) -> UiStrings {
             releases: "Релизы",
             onboard: "Включите авто, выберите режим, нажмите Применить",
             cancel: "Отмена",
+            logs: "Логи",
         },
     }
 }
@@ -210,6 +213,7 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "dl_fail" => "Download failed: {e}",
             "install_fail" => "Install failed: {e}",
             "theme_gone" => "Selected theme no longer installed — reset to no-theme (flags only)",
+            "rescanning" => "Scanning installed themes…",
             "need_target" => "Auto-switch needs Apps or System — enable at least one",
             "cancelled" => "Update cancelled.",
             "pick_light" => "Choose light-mode wallpaper",
@@ -244,6 +248,7 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "dl_fail" => "Ошибка загрузки: {e}",
             "install_fail" => "Ошибка установки: {e}",
             "theme_gone" => "Выбранная тема удалена — сброшено на «без темы» (только флаги)",
+            "rescanning" => "Сканирование установленных тем…",
             "need_target" => "Для автопереключения нужны Приложения или Система — включите хоть одно",
             "cancelled" => "Обновление отменено.",
             "pick_light" => "Выберите обои светлого режима",
@@ -362,6 +367,7 @@ mod tests {
             en.releases,
             en.onboard,
             en.cancel,
+            en.logs,
             ru.tab_auto,
             ru.tab_appearance,
             ru.apply,
@@ -372,6 +378,7 @@ mod tests {
             ru.releases,
             ru.onboard,
             ru.cancel,
+            ru.logs,
         ] {
             assert!(!s.is_empty());
         }

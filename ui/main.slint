@@ -116,6 +116,7 @@ export component MainWindow inherits Window {
     in property <string> t-dark-now;
     in property <string> t-language;
     in property <string> t-releases;
+    in property <string> t-logs;
     in property <string> t-onboard;
     in property <string> t-cancel;
     in property <string> t-close-title;
@@ -135,6 +136,7 @@ export component MainWindow inherits Window {
     callback check-updates();
     callback cancel-update();
     callback open-releases();
+    callback open-logs();
     callback clear-light-wallpaper();
     callback clear-dark-wallpaper();
     callback refresh-themes();
@@ -672,6 +674,14 @@ export component MainWindow inherits Window {
                         if root.checking-update : Button {
                             text: root.t-cancel;
                             clicked => { root.cancel-update(); }
+                        }
+                    }
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 8px;
+                        Button {
+                            text: root.t-logs;
+                            clicked => { root.open-logs(); }
                         }
                     }
                 }
