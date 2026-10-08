@@ -52,6 +52,7 @@
 })();
 </script>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
+<noscript><style>.reveal,.rise{opacity:1!important;transform:none!important;filter:none!important}.reveal .glyph{opacity:1!important;transform:none!important}</style></noscript>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
@@ -314,6 +315,13 @@
   .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex: none; }
   .live-chip b { font-weight: 600; }
   .live-chip span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* Gentle breathing for the live status chip; uses `translate`
+     so it never fights the mobile centering transform. */
+  .live-chip { animation: bob 6s ease-in-out infinite; }
+  @keyframes bob {
+    0%, 100% { translate: 0 0; }
+    50% { translate: 0 -5px; }
+  }
 
   section { padding: 8px 0 64px; }
   h2 {
@@ -325,7 +333,7 @@
   }
   .section-sub { color: var(--muted); margin-bottom: 28px; max-width: 60ch; }
 
-  .bento { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: stretch; margin-bottom: 8px; }
+  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; align-items: stretch; margin-bottom: 8px; }
   .bcard {
     position: relative;
     overflow: hidden;
@@ -334,12 +342,50 @@
     height: 100%;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 18px;
+    border-radius: 20px;
     padding: 22px;
     margin-bottom: 0;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   }
   .bcard:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--accent); }
+  .bcard::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transform: scaleX(0);
+    transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .bcard:hover::after { opacity: 0.7; transform: scaleX(1); }
+  /* Asymmetric bento in DOM order:
+     c1 c2 / c13(lock) c3 / c4 c5 / c6 c7 / c8 c9 / c10 c11 / c12.
+     Narrow slots hold the shortest copy; every row sums to 6. */
+  .bento > .bcard:nth-child(1) { grid-column: span 2; }
+  .bento > .bcard:nth-child(2) { grid-column: span 4; }
+  .bento > .bcard:nth-child(3) { grid-column: span 4; }
+  .bento > .bcard:nth-child(4) { grid-column: span 2; }
+  .bento > .bcard:nth-child(5),
+  .bento > .bcard:nth-child(6) { grid-column: span 3; }
+  .bento > .bcard:nth-child(7) { grid-column: span 4; }
+  .bento > .bcard:nth-child(8) { grid-column: span 2; }
+  .bento > .bcard:nth-child(9) { grid-column: span 2; }
+  .bento > .bcard:nth-child(10) { grid-column: span 4; }
+  .bento > .bcard:nth-child(11),
+  .bento > .bcard:nth-child(12) { grid-column: span 3; }
+  /* Closing strip: full-width privacy note, icon block left, text right. */
+  .bento > .bcard:nth-child(13) {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: 22px;
+  }
+  .bento > .bcard:nth-child(13) > .bcard-top { flex: 0 0 240px; margin-bottom: 0; }
+  .bento > .bcard:nth-child(13) > p { flex: 1; }
   .bcard::before {
     content: "";
     position: absolute;
@@ -364,10 +410,18 @@
     border: 1px solid var(--border);
   }
   .glyph svg { width: 22px; height: 22px; display: block; }
+  /* Icon pop: glyph springs in just after its card, nudges on hover. */
+  .reveal .glyph { opacity: 0; transform: scale(0.5); }
+  .reveal.in .glyph {
+    opacity: 1;
+    transform: scale(1);
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s, opacity 0.35s ease 0.12s;
+  }
+  .bcard:hover .glyph { transform: translateY(-2px) scale(1.06); transition-delay: 0s; }
   .bcard h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
   .bcard p { color: var(--muted); font-size: 14.5px; flex: 1; }
-  .reveal { opacity: 0; transform: translateY(26px) scale(0.985); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
-  .reveal.in { opacity: 1; transform: none; }
+  .reveal { opacity: 0; transform: translateY(26px) scale(0.985); filter: blur(6px); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), filter 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+  .reveal.in { opacity: 1; transform: none; filter: blur(0); }
 
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
   .step { position: relative; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
@@ -411,6 +465,7 @@
   .d4 { animation-delay: 0.32s; } .d5 { animation-delay: 0.4s; } .d6 { animation-delay: 0.48s; }
   @media (prefers-reduced-motion: reduce) {
     .rise { opacity: 1; animation: none; }
+    .live-chip { animation: none; }
     * { transition: none !important; }
     html { scroll-behavior: auto; }
   }
@@ -443,6 +498,9 @@
     section { padding: 8px 0 48px; }
     .steps { grid-template-columns: 1fr; }
     .bento { grid-template-columns: 1fr; }
+    .bento > .bcard:nth-child(n) { grid-column: auto; }
+    .bento > .bcard:nth-child(13) { flex-direction: column; align-items: stretch; gap: 0; }
+    .bento > .bcard:nth-child(13) > .bcard-top { flex: none; margin-bottom: 8px; }
     .bcard { padding: 18px; }
     footer { justify-content: center; text-align: center; }
   }
@@ -686,15 +744,35 @@
     return T("sw_light") + fmtHM(next.rise);
   }
 
+  // fetchJson with a timeout: geolocation and release-info must never
+  // hang the chip or the download meta on a stalled connection.
+  function fetchJson(url, ms) {
+    var ctrl = null, timer = null;
+    try {
+      if ("AbortController" in window) {
+        ctrl = new AbortController();
+        timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms || 8000);
+      }
+    } catch (e) { /* timeout unsupported, plain fetch below */ }
+    return fetch(url, ctrl ? { signal: ctrl.signal } : undefined).then(function (r) {
+      if (timer) clearTimeout(timer);
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    }).catch(function (err) {
+      if (timer) clearTimeout(timer);
+      throw err;
+    });
+  }
+
   // Silent IP geolocation (no permission prompt), then a real preview.
   function locate() {
-    return fetch("https://ipwho.is/").then(function (r) { return r.json(); }).then(function (j) {
+    return fetchJson("https://ipwho.is/", 8000).then(function (j) {
       if (j.success !== false && j.latitude != null && j.longitude != null) {
         return { lat: j.latitude, lon: j.longitude, place: [j.city, j.country].filter(Boolean).join(", ") };
       }
       throw new Error("no coords");
     }).catch(function () {
-      return fetch("https://ipapi.co/json/").then(function (r) { return r.json(); }).then(function (j) {
+      return fetchJson("https://ipapi.co/json/", 8000).then(function (j) {
         if (j.latitude != null && j.longitude != null) {
           return { lat: j.latitude, lon: j.longitude, place: [j.city, j.country_name].filter(Boolean).join(", ") };
         }
@@ -812,18 +890,28 @@
   var siteLang = "en";
   function T(key) { return (STR[siteLang] && STR[siteLang][key]) || STR.en[key] || ""; }
 
-  // Equal-height bento cards: measure the tallest, pin the rest to it.
+  // Equal-height bento cards, measured per row so rows keep their own
+  // rhythm: the wide banner stays compact while pairs align.
   // Re-runs on language switch, resize and font load (lengths change).
   function equalize() {
     var cards = document.querySelectorAll(".bcard");
     for (var i = 0; i < cards.length; i++) cards[i].style.minHeight = "";
     if (window.innerWidth <= 760) return;
-    var max = 0;
+    var rows = {};
     for (var j = 0; j < cards.length; j++) {
-      if (cards[j].offsetHeight > max) max = cards[j].offsetHeight;
+      var top = cards[j].offsetTop;
+      if (!rows[top]) rows[top] = [];
+      rows[top].push(cards[j]);
     }
-    if (max > 0) {
-      for (var k = 0; k < cards.length; k++) cards[k].style.minHeight = max + "px";
+    for (var key in rows) {
+      var row = rows[key];
+      var max = 0;
+      for (var m = 0; m < row.length; m++) {
+        if (row[m].offsetHeight > max) max = row[m].offsetHeight;
+      }
+      if (max > 0) {
+        for (var k = 0; k < row.length; k++) row[k].style.minHeight = max + "px";
+      }
     }
   }
 
@@ -854,7 +942,9 @@
   function markSeg(seg) {
     var want = seg.getAttribute("data-value");
     segButtons(seg, function (b) {
-      b.classList.toggle("on", b.getAttribute("data-val") === want);
+      var on = b.getAttribute("data-val") === want;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
     });
     movePill(seg);
   }
@@ -976,8 +1066,7 @@
     if (chip) chip.textContent = T("chip_fallback");
   });
 
-  fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
-    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+  fetchJson("https://api.github.com/repos/" + REPO + "/releases/latest", 10000)
     .then(function (rel) {
       var assets = rel.assets || [];
       function findAsset(part) {
@@ -1015,8 +1104,9 @@
     }
   })();
 
-  // Reveal-on-scroll for headers, cards, steps and footer — siblings
-  // cascade one after another instead of popping at once.
+  // Reveal-on-scroll for headers, cards, steps and footer. The cascade
+  // restarts in every visual row (position within the row, not the whole
+  // grid), so lower rows never wait on upper ones. One-shot per element.
   (function reveal() {
     var reduce = false;
     try { reduce = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
@@ -1025,18 +1115,21 @@
       for (var i = 0; i < els.length; i++) els[i].classList.add("in");
       return;
     }
-    for (var j = 0; j < els.length; j++) {
-      els[j].classList.add("reveal");
-      var sibs = els[j].parentNode ? els[j].parentNode.children : [];
-      var k = 0;
+    for (var j = 0; j < els.length; j++) els[j].classList.add("reveal");
+    function rowIndex(el) {
+      var sibs = el.parentNode ? el.parentNode.children : [];
+      var top = el.offsetTop, idx = 0;
       for (var s = 0; s < sibs.length; s++) {
-        if (sibs[s] === els[j]) { k = s; break; }
+        if (sibs[s] === el) break;
+        if (sibs[s].offsetTop === top) idx++;
       }
-      els[j].style.transitionDelay = Math.min(k, 6) * 80 + "ms";
+      return idx;
     }
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
         if (en.isIntersecting) {
+          var k = rowIndex(en.target);
+          en.target.style.transitionDelay = Math.min(k, 3) * 90 + "ms";
           en.target.classList.add("in");
           io.unobserve(en.target);
           (function (el) {
