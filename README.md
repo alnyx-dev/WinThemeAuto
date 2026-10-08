@@ -55,6 +55,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
 - 🎞️ **Wallpaper slideshows** — point a mode at a **folder** of images instead of a file and Windows rotates them natively (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle; each theme switch moves an already-active slideshow to the next image
+- 🪶 **Light on RAM** — Appearance previews are tiny shell thumbnails (≤320×180), never full decodes; idle footprint stays ~10 MB even with 8K photo libraries
 - 🔒 **Lock screen sync** — per-mode lock screen images via WinRT (no admin), with desktop/theme fallback
 - 🎨 **Accent color sync** — different Windows accent per light/dark mode, applied on every switch
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
@@ -139,11 +140,12 @@ Action flags win over `--tray` and work while the GUI instance is running
 (handy for AutoHotkey / StreamDeck / scheduled tasks). `--status` prints
 e.g. `Dark now • Next: light at 07:00 (in 7 h)`; `--toggle/--light/--dark`
 print the resulting `light` / `dark` and hold it until the next scheduled
-switch, just like the in-app Switch.
+switch, just like the in-app Switch. Wallpaper follows too: the flags advance
+an already-active slideshow folder to its next image, or configure it fresh.
 
 ### Updates
 
-The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for updates** button — the result replaces the version text and glows green when you're up to date. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
+The **Settings** tab shows the current version (e.g. v0.6.2) and a **Check for updates** button — the result replaces the version text and glows green when you're up to date. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
 
 ## ⚙️ Settings reference
 
@@ -213,7 +215,8 @@ Notes:
 
 - `light_wallpaper` / `dark_wallpaper` accept an image file or a folder (folder = native Windows slideshow of its `jpg/png/bmp` images).
 - Unknown or malformed fields are ignored; invalid times fall back to defaults (`07:00` / `19:00`).
-- Out-of-range values are clamped (`lat`, `lon`, offsets); an expired `manual_hold_until` clears the hold.
+- Out-of-range values are clamped (`lat`, `lon`, offsets, slideshow interval `1–1440`); an expired `manual_hold_until` clears the hold.
+- `slideshow_interval_min` defaults to `30`, `slideshow_shuffle` to `false`.
 - `manual_hold` / `manual_hold_until` are managed by Switch/CLI — no need to hand-edit them.
 - Saves are atomic (`config.json.tmp` → rename). A fully unparseable file is backed up to `config.json.corrupt.bak` and defaults are used.
 - Diagnostics go to `%APPDATA%\WinThemeAuto\app.log` (rotated at 256 KB, one backup kept; **Logs** button in Settings opens it).
@@ -222,6 +225,7 @@ Notes:
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
 - **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker, folder picker or manual entry, validated on Apply) wins over the theme wallpaper. A single image is applied via `SystemParametersInfoW`; a folder becomes a native Windows slideshow via `IDesktopWallpaper::SetSlideshow` (+ interval/shuffle) — no shell flashes, unlike launching `.theme` files. When a switch lands on an already-active slideshow folder it advances to the next image (`AdvanceSlideshow`); a freshly configured folder starts at its first image.
+- **Previews (bounded RAM):** the Appearance tab shows shell thumbnails (`IShellItemImageFactory`, 320×180) instead of full decodes — a 4K photo costs kilobytes, not tens of megabytes. Files under 8 MB fall back to direct load when no thumbnail provider exists.
 - **Lock screen (optional):** per-mode lock image via WinRT (`TrySetLockScreenImageAsync`, `LockScreen` fallback, STA-safe) — no admin, per-user. Custom lock path wins; empty falls back to the desktop wallpaper/theme image.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
@@ -252,6 +256,8 @@ Notes:
 - **Multiple PCs:** copy `%APPDATA%\WinThemeAuto\config.json` between machines to clone your setup.
 - **Manual mode:** disable **Auto switch** and uncheck autostart — the app becomes a pure tray toggle for themes.
 - **Wallpaper that follows:** pick light/dark themes whose wallpapers you like — e.g. a bright photo theme for day, a dark abstract one for night. Or skip themes entirely and set two custom image paths.
+- **Rotate every switch:** point light and dark at the *same* slideshow folder — each switch then moves to the next image. With different folders per mode, each visit restarts at that folder's first image.
+- **Same-image lock screen:** leave lock paths empty with a slideshow desktop — the lock reuses the folder's first image (WinRT takes single files only).
 - **Second launch?** It just focuses the already-running window — you'll never get duplicate tray icons.
 
 ## 🧩 Project structure
@@ -275,6 +281,8 @@ WinThemeAuto/
 │   ├── geo.rs       # IP geolocation (ipwho.is, ipapi.co fallback)
 │   ├── tray.rs      # Tray icon + menu
 │   ├── themes.rs    # Installed .theme enumeration + parsing
+│   ├── slideshow.rs # Folder slideshows: SetSlideshow, AdvanceSlideshow, apply plan
+│   ├── thumb.rs     # Bounded-RAM shell thumbnails for previews
 │   ├── single_instance.rs # Named-mutex guard + focus running window
 │   ├── update.rs    # Self-update: check, download, self-install
 │   └── autostart.rs # HKCU Run key management
@@ -284,7 +292,7 @@ WinThemeAuto/
 └── Cargo.toml
 ```
 
-Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev-tests), `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `windows` (WinRT lock screen), `anyhow`, `rfd` (native file picker).
+Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev-tests), `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `windows` (WinRT lock screen, shell slideshow + thumbnails), `anyhow`, `rfd` (native file picker).
 
 ## 🔒 Privacy
 
@@ -345,6 +353,20 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 </details>
 
+<details>
+<summary><b>Why does my slideshow change image on every switch?</b></summary>
+
+That's the advance feature: a switch landing on an already-active slideshow folder moves it to the next image (wrapping around). A freshly picked folder always starts at its first image. If you'd rather have a static image, point the mode at a single file instead of a folder.
+
+</details>
+
+<details>
+<summary><b>How much RAM does it use?</b></summary>
+
+Around 10 MB idle. Wallpaper previews are capped shell thumbnails (320×180), so even 8K photo libraries don't inflate the footprint — full files are never decoded for the UI.
+
+</details>
+
 ## 🛠️ Troubleshooting
 
 | Symptom | Fix |
@@ -362,6 +384,8 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `… slideshow folder has no images` | The folder contains no `jpg/png/bmp` files — add images or pick another folder. |
 | `Slideshow interval must be 1–1440 minutes` | Interval is minutes, e.g. `30`. |
 | `Light/Dark lock screen not found` | Same for lock images — use the `…` picker; empty falls back to desktop. |
+| Preview box stays empty | The file is huge with no shell thumbnail provider — files over 8 MB fall back to no preview (they still apply normally). Shrink/convert it if the preview matters. |
+| `Wallpaper: …` repeats every minute | The target fails on every tick so dedup never engages — fix the path and press **Apply**; one success stops the repeats. |
 | `Lock screen: …` | Shows the WinRT reason + `[ext, size]` — use a local `jpg/png` (<2 MB); `TrySet` false falls back to `LockScreen` API. |
 | `Light/Dark accent must be hex RGB` | Use 6 hex digits, e.g. `0078D4` (a leading `#` is fine too). |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
@@ -449,7 +473,7 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
-Please keep PRs focused and add/adjust unit tests for `config`, `schedule`, `sun`, `geo` or `update` logic when relevant.
+Please keep PRs focused and add/adjust unit tests for `config`, `schedule`, `sun`, `geo`, `slideshow`, `thumb` or `update` logic when relevant.
 
 ## ⭐ Star history
 
