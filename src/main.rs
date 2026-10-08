@@ -11,6 +11,7 @@ mod lockscreen;
 mod log;
 mod schedule;
 mod single_instance;
+mod slideshow;
 mod state;
 mod sun;
 mod theme;
@@ -29,8 +30,8 @@ use std::{rc::Rc, sync::Arc, time::Duration};
 use theme::Theme;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 use ui::{
-    apply_autostart_instant, apply_language_instant, browse_lockscreen, browse_wallpaper,
-    detect_location, load_into_ui, refresh_lockscreen_preview, refresh_themes,
+    apply_autostart_instant, apply_language_instant, browse_lockscreen, browse_slideshow_folder,
+    browse_wallpaper, detect_location, load_into_ui, refresh_lockscreen_preview, refresh_themes,
     refresh_wallpaper_preview, show_window,
 };
 
@@ -85,15 +86,23 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
     let themes = themes::enumerate();
     if let Some(path) = resolve_wallpaper_path(&cfg, &themes, want) {
         if path.exists() {
-            if let Err(e) = theme::set_wallpaper(&path) {
+            let interval = slideshow::clamp_interval(cfg.slideshow_interval_min);
+            if let Err(e) = slideshow::apply_desktop(&path, interval, cfg.slideshow_shuffle) {
                 eprintln!("Wallpaper: {e}");
             }
         }
     }
-    if let Some(path) = resolve_lock_wallpaper_path(&cfg, &themes, want) {
-        if path.exists() {
-            if let Err(e) = lockscreen::set_image(&path) {
-                eprintln!("Lock screen: {e}");
+    if let Some(resolved) = resolve_lock_wallpaper_path(&cfg, &themes, want) {
+        let path = if resolved.is_dir() {
+            slideshow::first_image(&resolved)
+        } else {
+            Some(resolved)
+        };
+        if let Some(path) = path {
+            if path.exists() {
+                if let Err(e) = lockscreen::set_image(&path) {
+                    eprintln!("Lock screen: {e}");
+                }
             }
         }
     }
@@ -373,6 +382,24 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
             if let Some(ui) = w.upgrade() {
                 let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
                 browse_wallpaper(&ui, false, lang);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_browse_light_slideshow(move || {
+            if let Some(ui) = w.upgrade() {
+                let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
+                browse_slideshow_folder(&ui, true, lang);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_browse_dark_slideshow(move || {
+            if let Some(ui) = w.upgrade() {
+                let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
+                browse_slideshow_folder(&ui, false, lang);
             }
         });
     }

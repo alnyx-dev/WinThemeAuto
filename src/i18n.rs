@@ -58,6 +58,10 @@ pub struct UiStrings {
     pub light_wp_ph: &'static str,
     pub dark_wp_ph: &'static str,
     pub wp_hint: &'static str,
+    pub slideshow_interval: &'static str,
+    pub slideshow_shuffle: &'static str,
+    pub slideshow_hint: &'static str,
+    pub folder: &'static str,
     pub lock_check: &'static str,
     pub light_lock_ph: &'static str,
     pub dark_lock_ph: &'static str,
@@ -109,9 +113,13 @@ pub fn ui(lang: Lang) -> UiStrings {
             system: "System",
             light_label: "Light:",
             dark_label: "Dark:",
-            light_wp_ph: "Light wallpaper (optional)…",
-            dark_wp_ph: "Dark wallpaper (optional)…",
-            wp_hint: "A custom path wins over the theme wallpaper. Empty = theme only.",
+            light_wp_ph: "Light wallpaper file or slideshow folder…",
+            dark_wp_ph: "Dark wallpaper file or slideshow folder…",
+            wp_hint: "A custom path wins over the theme wallpaper. File = single image, folder = slideshow. Empty = theme only.",
+            slideshow_interval: "Every (min):",
+            slideshow_shuffle: "Shuffle slideshow",
+            slideshow_hint: "Slideshow applies to folders above via Windows (1–1440 min).",
+            folder: "Folder",
             lock_check: "Sync lock screen with theme",
             light_lock_ph: "Light lock screen (optional)…",
             dark_lock_ph: "Dark lock screen (optional)…",
@@ -161,9 +169,13 @@ pub fn ui(lang: Lang) -> UiStrings {
             system: "Система",
             light_label: "Светлая:",
             dark_label: "Тёмная:",
-            light_wp_ph: "Светлые обои (необязательно)…",
-            dark_wp_ph: "Тёмные обои (необязательно)…",
-            wp_hint: "Свой путь важнее обоев темы. Пусто = только тема.",
+            light_wp_ph: "Файл обоев или папка слайд-шоу…",
+            dark_wp_ph: "Файл обоев или папка слайд-шоу…",
+            wp_hint: "Свой путь важнее обоев темы. Файл = одна картинка, папка = слайд-шоу. Пусто = только тема.",
+            slideshow_interval: "Каждые (мин):",
+            slideshow_shuffle: "Перемешать слайд-шоу",
+            slideshow_hint: "Слайд-шоу для папок выше через Windows (1–1440 мин).",
+            folder: "Папка",
             lock_check: "Экран блокировки в цвет темы",
             light_lock_ph: "Светлый локскрин (необязательно)…",
             dark_lock_ph: "Тёмный локскрин (необязательно)…",
@@ -231,6 +243,9 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "cancelled" => "Update cancelled.",
             "pick_light" => "Choose light-mode wallpaper",
             "pick_dark" => "Choose dark-mode wallpaper",
+            "pick_light_slideshow" => "Choose light-mode slideshow folder",
+            "pick_dark_slideshow" => "Choose dark-mode slideshow folder",
+            "bad_slideshow_interval" => "Slideshow interval must be 1–1440 minutes",
             "pick_light_lock" => "Choose light-mode lock screen image",
             "pick_dark_lock" => "Choose dark-mode lock screen image",
             "held" => "Manual theme — auto resumes at the next switch ({e})",
@@ -269,6 +284,9 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "cancelled" => "Обновление отменено.",
             "pick_light" => "Выберите обои светлого режима",
             "pick_dark" => "Выберите обои тёмного режима",
+            "pick_light_slideshow" => "Выберите папку слайд-шоу светлого режима",
+            "pick_dark_slideshow" => "Выберите папку слайд-шоу тёмного режима",
+            "bad_slideshow_interval" => "Интервал слайд-шоу — 1–1440 минут",
             "pick_light_lock" => "Выберите картинку блокировки светлого режима",
             "pick_dark_lock" => "Выберите картинку блокировки тёмного режима",
             "held" => "Ручная тема — авто возобновится на следующем переключении ({e})",
@@ -298,6 +316,23 @@ pub fn wp_missing(lang: Lang, light: bool, path: &str) -> String {
                 "Светлые"
             } else {
                 "Тёмные"
+            }
+        ),
+    }
+}
+
+pub fn slideshow_no_images(lang: Lang, light: bool, path: &str) -> String {
+    match lang {
+        Lang::En => format!(
+            "{} slideshow folder has no images (jpg/png/bmp): {path}",
+            mode_word(lang, light)
+        ),
+        Lang::Ru => format!(
+            "В папке слайд-шоу ({}) нет картинок (jpg/png/bmp): {path}",
+            if light {
+                "светлая"
+            } else {
+                "тёмная"
             }
         ),
     }
@@ -404,6 +439,10 @@ mod tests {
             en.light_lock_ph,
             en.dark_lock_ph,
             en.lock_hint,
+            en.slideshow_interval,
+            en.slideshow_shuffle,
+            en.slideshow_hint,
+            en.folder,
             ru.tab_auto,
             ru.tab_appearance,
             ru.apply,
@@ -419,6 +458,10 @@ mod tests {
             ru.light_lock_ph,
             ru.dark_lock_ph,
             ru.lock_hint,
+            ru.slideshow_interval,
+            ru.slideshow_shuffle,
+            ru.slideshow_hint,
+            ru.folder,
         ] {
             assert!(!s.is_empty());
         }

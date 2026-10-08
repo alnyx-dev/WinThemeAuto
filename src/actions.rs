@@ -2,7 +2,7 @@ use crate::{
     accent, autostart,
     config::{Config, Mode},
     i18n::{self, Lang},
-    lockscreen, log, schedule,
+    lockscreen, log, schedule, slideshow,
     state::{
         clear_hold, resolve_lock_wallpaper_path, resolve_wallpaper_path, set_hold, theme_path,
         Shared, State,
@@ -171,14 +171,16 @@ pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
     let Some(path) = resolve_wallpaper_path(&st.cfg, &st.themes, want) else {
         return;
     };
-    if st.last_wallpaper.as_ref() == Some(&path) {
+    let interval = slideshow::clamp_interval(st.cfg.slideshow_interval_min);
+    let key = slideshow::applied_key(&path, interval, st.cfg.slideshow_shuffle);
+    if st.last_wallpaper.as_ref() == Some(&key) {
         return;
     }
     if !path.exists() {
         return;
     }
-    match theme::set_wallpaper(&path) {
-        Ok(()) => st.last_wallpaper = Some(path),
+    match slideshow::apply_desktop(&path, interval, st.cfg.slideshow_shuffle) {
+        Ok(()) => st.last_wallpaper = Some(key),
         Err(e) => {
             log::warn(format!("wallpaper failed: {e:#}"));
             let lang = Lang::from_code(&st.cfg.language);
@@ -188,8 +190,18 @@ pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
 }
 
 pub(crate) fn apply_lockscreen(ui: &MainWindow, st: &mut State, want: Theme) {
-    let Some(path) = resolve_lock_wallpaper_path(&st.cfg, &st.themes, want) else {
+    let Some(resolved) = resolve_lock_wallpaper_path(&st.cfg, &st.themes, want) else {
         return;
+    };
+    // A slideshow folder as desktop fallback resolves to its first image:
+    // the lock screen API only accepts single files.
+    let path = if resolved.is_dir() {
+        match slideshow::first_image(&resolved) {
+            Some(first) => first,
+            None => return,
+        }
+    } else {
+        resolved
     };
     if st.last_lockscreen.as_ref() == Some(&path) {
         return;
@@ -478,12 +490,34 @@ pub(crate) fn apply_settings(
     let light_wallpaper = ui.get_light_wallpaper().trim().to_string();
     let dark_wallpaper = ui.get_dark_wallpaper().trim().to_string();
     for (light, p) in [(true, &light_wallpaper), (false, &dark_wallpaper)] {
-        if !p.is_empty() && !PathBuf::from(p).is_file() {
-            ui.set_tab_index(1);
-            ui.set_status(i18n::wp_missing(lang, light, p).into());
-            return;
+        if p.is_empty() {
+            continue;
         }
+        let fs_path = PathBuf::from(p);
+        if fs_path.is_file() {
+            continue;
+        }
+        if fs_path.is_dir() {
+            if slideshow::collect_images(&fs_path).is_empty() {
+                ui.set_tab_index(1);
+                ui.set_status(i18n::slideshow_no_images(lang, light, p).into());
+                return;
+            }
+            continue;
+        }
+        ui.set_tab_index(1);
+        ui.set_status(i18n::wp_missing(lang, light, p).into());
+        return;
     }
+
+    let Some(slideshow_interval_min) =
+        slideshow::parse_interval_minutes(ui.get_slideshow_interval().as_str())
+    else {
+        ui.set_tab_index(1);
+        ui.set_status(i18n::msg(lang, "bad_slideshow_interval", "").into());
+        return;
+    };
+    let slideshow_shuffle = ui.get_slideshow_shuffle();
 
     let lockscreen_enabled = ui.get_lockscreen_enabled();
     let light_lockscreen = ui.get_light_lockscreen().trim().to_string();
@@ -533,6 +567,8 @@ pub(crate) fn apply_settings(
         dark_theme,
         light_wallpaper,
         dark_wallpaper,
+        slideshow_interval_min,
+        slideshow_shuffle,
         lockscreen_enabled,
         light_lockscreen,
         dark_lockscreen,

@@ -29,6 +29,8 @@ pub struct Config {
     pub dark_theme: String,
     pub light_wallpaper: String,
     pub dark_wallpaper: String,
+    pub slideshow_interval_min: u32,
+    pub slideshow_shuffle: bool,
     pub lockscreen_enabled: bool,
     pub light_lockscreen: String,
     pub dark_lockscreen: String,
@@ -58,6 +60,8 @@ impl Default for Config {
             dark_theme: String::new(),
             light_wallpaper: String::new(),
             dark_wallpaper: String::new(),
+            slideshow_interval_min: crate::slideshow::DEFAULT_INTERVAL_MIN,
+            slideshow_shuffle: false,
             lockscreen_enabled: false,
             light_lockscreen: String::new(),
             dark_lockscreen: String::new(),
@@ -111,6 +115,7 @@ fn sanitize(cfg: &mut Config) {
     cfg.lon = cfg.lon.filter(|v| v.is_finite()).map(normalize_lon);
     cfg.light_offset_min = cfg.light_offset_min.clamp(-180, 180);
     cfg.dark_offset_min = cfg.dark_offset_min.clamp(-180, 180);
+    cfg.slideshow_interval_min = crate::slideshow::clamp_interval(cfg.slideshow_interval_min);
     cfg.light_at = truncate_secs(cfg.light_at);
     cfg.dark_at = truncate_secs(cfg.dark_at);
     let lang = crate::i18n::Lang::from_code(&cfg.language);
@@ -196,6 +201,13 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     }
     if let Some(s) = v.get("dark_wallpaper").and_then(|x| x.as_str()) {
         cfg.dark_wallpaper = s.trim().to_string();
+    }
+    if let Some(n) = v.get("slideshow_interval_min").and_then(|x| x.as_u64()) {
+        cfg.slideshow_interval_min =
+            crate::slideshow::clamp_interval(n.min(u32::MAX as u64) as u32);
+    }
+    if let Some(b) = v.get("slideshow_shuffle").and_then(|x| x.as_bool()) {
+        cfg.slideshow_shuffle = b;
     }
     if let Some(b) = v.get("lockscreen_enabled").and_then(|x| x.as_bool()) {
         cfg.lockscreen_enabled = b;
@@ -317,6 +329,34 @@ mod tests {
         let old: Config = serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
         assert_eq!(old.light_wallpaper, "");
         assert_eq!(old.dark_wallpaper, "");
+    }
+
+    #[test]
+    fn merged_parses_slideshow_fields() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"slideshow_interval_min":15,"slideshow_shuffle":true}"#)
+                .unwrap();
+        let c = from_value_merged(&v);
+        assert_eq!(c.slideshow_interval_min, 15);
+        assert!(c.slideshow_shuffle);
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"slideshow_interval_min":99999}"#).unwrap();
+        assert_eq!(
+            from_value_merged(&v).slideshow_interval_min,
+            crate::slideshow::MAX_INTERVAL_MIN
+        );
+        let d = Config::default();
+        assert_eq!(
+            d.slideshow_interval_min,
+            crate::slideshow::DEFAULT_INTERVAL_MIN
+        );
+        assert!(!d.slideshow_shuffle);
+        let old: Config = serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
+        assert_eq!(
+            old.slideshow_interval_min,
+            crate::slideshow::DEFAULT_INTERVAL_MIN
+        );
+        assert!(!old.slideshow_shuffle);
     }
 
     #[test]

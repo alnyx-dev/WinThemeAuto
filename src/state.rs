@@ -1,4 +1,4 @@
-use crate::{config::Config, log, theme::Theme, themes};
+use crate::{config::Config, log, slideshow::AppliedWallpaper, theme::Theme, themes};
 use chrono::{DateTime, Local};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,7 +9,7 @@ pub struct State {
     pub last_scheduled: Option<Theme>,
     pub update_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub last_titlebar_sys: Option<Theme>,
-    pub last_wallpaper: Option<PathBuf>,
+    pub last_wallpaper: Option<AppliedWallpaper>,
     pub last_lockscreen: Option<PathBuf>,
     pub last_accent: Option<u32>,
     pub last_tray_tooltip: Option<String>,

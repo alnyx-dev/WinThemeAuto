@@ -71,6 +71,8 @@ pub(crate) fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::Them
     ui.set_dark_theme_index(theme_index(themes, &cfg.dark_theme));
     ui.set_light_wallpaper(cfg.light_wallpaper.clone().into());
     ui.set_dark_wallpaper(cfg.dark_wallpaper.clone().into());
+    ui.set_slideshow_interval(cfg.slideshow_interval_min.to_string().into());
+    ui.set_slideshow_shuffle(cfg.slideshow_shuffle);
     ui.set_lockscreen_enabled(cfg.lockscreen_enabled);
     ui.set_light_lockscreen(cfg.light_lockscreen.clone().into());
     ui.set_dark_lockscreen(cfg.dark_lockscreen.clone().into());
@@ -109,6 +111,10 @@ pub(crate) fn apply_lang(ui: &MainWindow, lang: Lang) {
     ui.set_t_light_wp_ph(s.light_wp_ph.into());
     ui.set_t_dark_wp_ph(s.dark_wp_ph.into());
     ui.set_t_wp_hint(s.wp_hint.into());
+    ui.set_t_slideshow_interval(s.slideshow_interval.into());
+    ui.set_t_slideshow_shuffle(s.slideshow_shuffle.into());
+    ui.set_t_slideshow_hint(s.slideshow_hint.into());
+    ui.set_t_folder(s.folder.into());
     ui.set_t_lock_check(s.lock_check.into());
     ui.set_t_light_lock_ph(s.light_lock_ph.into());
     ui.set_t_dark_lock_ph(s.dark_lock_ph.into());
@@ -257,12 +263,24 @@ pub(crate) fn refresh_wallpaper_preview(ui: &MainWindow, light: bool) {
         ui.get_dark_wallpaper()
     };
     let path = path.trim().to_string();
-    let has = !path.is_empty() && PathBuf::from(&path).is_file();
-    let img = if has {
-        slint::Image::load_from_path(std::path::Path::new(&path)).unwrap_or_default()
+    // A slideshow folder previews with its first image.
+    let preview_file: Option<PathBuf> = if path.is_empty() {
+        None
     } else {
-        slint::Image::default()
+        let fs = PathBuf::from(&path);
+        if fs.is_file() {
+            Some(fs)
+        } else if fs.is_dir() {
+            crate::slideshow::first_image(&fs)
+        } else {
+            None
+        }
     };
+    let has = preview_file.as_ref().is_some_and(|p| p.is_file());
+    let img = preview_file
+        .as_deref()
+        .map(|p| slint::Image::load_from_path(p).unwrap_or_default())
+        .unwrap_or_default();
     if light {
         ui.set_light_wp_preview(img);
         ui.set_light_wp_has(has);
@@ -302,6 +320,35 @@ pub(crate) fn browse_wallpaper(ui: &MainWindow, light: bool, lang: Lang) {
             .set_title(title)
             .add_filter("Images", &["jpg", "jpeg", "png", "bmp"])
             .pick_file();
+
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            if let Some(path) = picked {
+                let s: SharedString = path.to_string_lossy().into_owned().into();
+                if light {
+                    ui.set_light_wallpaper(s);
+                } else {
+                    ui.set_dark_wallpaper(s);
+                }
+                ui.set_dirty(true);
+                refresh_wallpaper_preview(&ui, light);
+            }
+        });
+    });
+}
+
+pub(crate) fn browse_slideshow_folder(ui: &MainWindow, light: bool, lang: Lang) {
+    let title = i18n::msg(
+        lang,
+        if light {
+            "pick_light_slideshow"
+        } else {
+            "pick_dark_slideshow"
+        },
+        "",
+    );
+    let weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let picked = rfd::FileDialog::new().set_title(title).pick_folder();
 
         let _ = weak.upgrade_in_event_loop(move |ui| {
             if let Some(path) = picked {

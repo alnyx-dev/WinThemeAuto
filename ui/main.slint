@@ -70,6 +70,8 @@ export component MainWindow inherits Window {
     in-out property <int> dark-theme-index;
     in-out property <string> light-wallpaper;
     in-out property <string> dark-wallpaper;
+    in-out property <string> slideshow-interval;
+    in-out property <bool> slideshow-shuffle;
     in-out property <bool> lockscreen-enabled;
     in-out property <string> light-lockscreen;
     in-out property <string> dark-lockscreen;
@@ -110,6 +112,10 @@ export component MainWindow inherits Window {
     in property <string> t-light-wp-ph;
     in property <string> t-dark-wp-ph;
     in property <string> t-wp-hint;
+    in property <string> t-slideshow-interval;
+    in property <string> t-slideshow-shuffle;
+    in property <string> t-slideshow-hint;
+    in property <string> t-folder;
     in property <string> t-lock-check;
     in property <string> t-light-lock-ph;
     in property <string> t-dark-lock-ph;
@@ -144,6 +150,8 @@ export component MainWindow inherits Window {
     callback detect-location();
     callback browse-light-wallpaper();
     callback browse-dark-wallpaper();
+    callback browse-light-slideshow();
+    callback browse-dark-slideshow();
     callback browse-light-lockscreen();
     callback browse-dark-lockscreen();
     callback check-updates();
@@ -239,7 +247,7 @@ export component MainWindow inherits Window {
         }
 
         Rectangle {
-            height: 500px;
+            height: 560px;
             VerticalBox {
                 padding: 0px;
                 spacing: 0px;
@@ -503,6 +511,10 @@ export component MainWindow inherits Window {
                         clicked => { root.browse-light-wallpaper(); }
                     }
                     Button {
+                        text: root.t-folder;
+                        clicked => { root.browse-light-slideshow(); }
+                    }
+                    Button {
                         text: "×";
                         clicked => { root.clear-light-wallpaper(); }
                     }
@@ -534,12 +546,43 @@ export component MainWindow inherits Window {
                         clicked => { root.browse-dark-wallpaper(); }
                     }
                     Button {
+                        text: root.t-folder;
+                        clicked => { root.browse-dark-slideshow(); }
+                    }
+                    Button {
                         text: "×";
                         clicked => { root.clear-dark-wallpaper(); }
                     }
                 }
                 Text {
                     text: root.t-wp-hint;
+                    font-size: 11px;
+                    color: #94a3b8;
+                    wrap: word-wrap;
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    Text {
+                        text: root.t-slideshow-interval;
+                        font-size: 12px;
+                        color: #64748b;
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> root.slideshow-interval;
+                        placeholder-text: "30";
+                        width: 70px;
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                    }
+                    CheckBox {
+                        text: root.t-slideshow-shuffle;
+                        checked <=> root.slideshow-shuffle;
+                        toggled => { root.settings-changed(); }
+                    }
+                }
+                Text {
+                    text: root.t-slideshow-hint;
                     font-size: 11px;
                     color: #94a3b8;
                     wrap: word-wrap;
