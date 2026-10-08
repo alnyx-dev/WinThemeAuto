@@ -369,6 +369,9 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 
 ## 📜 Changelog
 
+### v0.6.1
+- 🪶 Bounded-RAM previews: wallpaper/lock thumbnails via the shell thumbnail API (320×180) instead of full-file decode — fixes 300+ MB usage with large (4K/8K) wallpapers
+
 ### v0.6.0
 - 🎞️ Wallpaper slideshows: per-mode **folder** of images applied as a native Windows slideshow (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle; file paths keep working as single images
 - 🖼️ Appearance tab: `Folder` picker buttons, interval + shuffle controls, folder preview via first image, EN/RU strings, validation on Apply
