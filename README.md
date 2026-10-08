@@ -54,6 +54,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
+- 🎞️ **Wallpaper slideshows** — point a mode at a **folder** of images instead of a file and Windows rotates them natively (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle
 - 🔒 **Lock screen sync** — per-mode lock screen images via WinRT (no admin), with desktop/theme fallback
 - 🎨 **Accent color sync** — different Windows accent per light/dark mode, applied on every switch
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
@@ -103,7 +104,7 @@ cargo test
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect**, then set offsets in minutes.
 4. Still on the tab, pick **Apply to**: **Apps** and/or **System**.
-5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (via the `…` picker, wins over theme wallpaper). Enable **Sync lock screen with theme** and set per-mode lock images (empty = same as desktop). Enable **Sync accent color** and click a swatch (or type hex) per mode.
+5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (`…` picks an image file, `Folder` picks a slideshow folder; wins over theme wallpaper). Set the slideshow **interval** and **Shuffle** for folders. Enable **Sync lock screen with theme** and set per-mode lock images (empty = same as desktop). Enable **Sync accent color** and click a swatch (or type hex) per mode.
 6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**, plus a **Logs** button (`%APPDATA%\WinThemeAuto\app.log`).
 7. Click **Apply** (always visible at the bottom). Settings save and apply immediately.
 
@@ -156,7 +157,8 @@ The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for u
 | `Light/Dark offset (min)` | Shift relative to sunrise/sunset. Integer `-180…180`. Negative = earlier. |
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
-| `Light/Dark wallpaper` | Custom image path (`jpg/png/bmp`) per mode — wins over the theme wallpaper. `…` opens a file picker. Empty = theme only. |
+| `Light/Dark wallpaper` | Custom image file (`jpg/png/bmp`) or slideshow **folder** per mode — wins over the theme wallpaper. `…` opens a file picker, `Folder` a folder picker. Empty = theme only. |
+| `Every (min)` / `Shuffle` | Slideshow rotation for wallpaper folders: interval in minutes (`1–1440`), optional random order. Handled natively by Windows. |
 | `Sync lock screen` | Applies the per-mode image to the Windows lock screen on every switch (WinRT, no admin). |
 | `Light/Dark lock screen` | Custom lock image (`jpg/png`, local file <2 MB works best) per mode. Empty = same as desktop wallpaper (or theme). |
 | `Sync accent color` | Applies the per-mode accent on every switch — click a swatch to fill + apply instantly, or type hex. |
@@ -192,7 +194,9 @@ Example:
   "light_theme": "C:/Windows/Resources/Themes/aero.theme",
   "dark_theme": "",
   "light_wallpaper": "C:/Wallpapers/day.jpg",
-  "dark_wallpaper": "C:/Wallpapers/night.jpg",
+  "dark_wallpaper": "C:/Wallpapers/night",
+  "slideshow_interval_min": 30,
+  "slideshow_shuffle": false,
   "lockscreen_enabled": true,
   "light_lockscreen": "C:/Wallpapers/lock-day.jpg",
   "dark_lockscreen": "C:/Wallpapers/lock-night.jpg",
@@ -207,6 +211,7 @@ Example:
 
 Notes:
 
+- `light_wallpaper` / `dark_wallpaper` accept an image file or a folder (folder = native Windows slideshow of its `jpg/png/bmp` images).
 - Unknown or malformed fields are ignored; invalid times fall back to defaults (`07:00` / `19:00`).
 - Out-of-range values are clamped (`lat`, `lon`, offsets); an expired `manual_hold_until` clears the hold.
 - `manual_hold` / `manual_hold_until` are managed by Switch/CLI — no need to hand-edit them.
@@ -216,7 +221,7 @@ Notes:
 ## 🧠 How it works
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
-- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker or manual entry, validated on Apply) wins over the theme wallpaper. On a switch the wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
+- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker, folder picker or manual entry, validated on Apply) wins over the theme wallpaper. A single image is applied via `SystemParametersInfoW`; a folder becomes a native Windows slideshow via `IDesktopWallpaper::SetSlideshow` (+ interval/shuffle) — no shell flashes, unlike launching `.theme` files.
 - **Lock screen (optional):** per-mode lock image via WinRT (`TrySetLockScreenImageAsync`, `LockScreen` fallback, STA-safe) — no admin, per-user. Custom lock path wins; empty falls back to the desktop wallpaper/theme image.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
@@ -353,7 +358,9 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `Location failed…` | No internet or IP service blocked — enter coordinates manually. |
 | `Nothing to toggle` | Enable at least one of **Apps** / **System**. |
 | `No switches` / `Polar day/night — stays …` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
-| `Light/Dark wallpaper not found` | The custom path must point to an existing file — use the `…` picker or fix the path. |
+| `Light/Dark wallpaper not found` | The custom path must point to an existing file or folder — use the `…` / `Folder` picker or fix the path. |
+| `… slideshow folder has no images` | The folder contains no `jpg/png/bmp` files — add images or pick another folder. |
+| `Slideshow interval must be 1–1440 minutes` | Interval is minutes, e.g. `30`. |
 | `Light/Dark lock screen not found` | Same for lock images — use the `…` picker; empty falls back to desktop. |
 | `Lock screen: …` | Shows the WinRT reason + `[ext, size]` — use a local `jpg/png` (<2 MB); `TrySet` false falls back to `LockScreen` API. |
 | `Light/Dark accent must be hex RGB` | Use 6 hex digits, e.g. `0078D4` (a leading `#` is fine too). |
@@ -361,6 +368,11 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.6.0
+- 🎞️ Wallpaper slideshows: per-mode **folder** of images applied as a native Windows slideshow (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle; file paths keep working as single images
+- 🖼️ Appearance tab: `Folder` picker buttons, interval + shuffle controls, folder preview via first image, EN/RU strings, validation on Apply
+- 🔄 Slideshow follows auto-switch, manual Switch and CLI; lock-screen fallback reuses the folder's first image
 
 ### v0.5.0
 - 🔒 Per-theme lock screen: separate light/dark images via WinRT (no admin), STA-safe COM, `LockScreen` fallback when `TrySet` returns false
