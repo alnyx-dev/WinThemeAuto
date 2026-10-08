@@ -54,6 +54,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
+- 🔒 **Lock screen sync** — per-mode lock screen images via WinRT (no admin), with desktop/theme fallback
 - 🎨 **Accent color sync** — different Windows accent per light/dark mode, applied on every switch
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
 - **Single instance** — a second launch just focuses the running window instead of duplicating tray icons
@@ -360,6 +361,12 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.5.0
+- 🔒 Per-theme lock screen: separate light/dark images via WinRT (no admin), STA-safe COM, `LockScreen` fallback when `TrySet` returns false
+- 🖼️ Appearance tab: lock checkbox + pickers with thumbnails, EN/RU strings, validation on Apply
+- 🔄 Lock follows auto-switch, manual Switch, CLI and theme-wallpaper fallback; full error chain in status + log
+- 📦 New dep: `windows 0.61` (Foundation/Storage/System_UserProfile/Com)
 
 ### v0.4.0
 - ⏰ Exact scheduler: wakes precisely at each switch (60 s safety net for clock/sleep drift) instead of polling every 5 s
