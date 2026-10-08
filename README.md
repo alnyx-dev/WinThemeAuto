@@ -102,7 +102,7 @@ cargo test
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect**, then set offsets in minutes.
 4. Still on the tab, pick **Apply to**: **Apps** and/or **System**.
-5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (via the `…` picker, wins over theme wallpaper). Enable **Sync accent color** and click a swatch (or type hex) per mode.
+5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (via the `…` picker, wins over theme wallpaper). Enable **Sync lock screen with theme** and set per-mode lock images (empty = same as desktop). Enable **Sync accent color** and click a swatch (or type hex) per mode.
 6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**, plus a **Logs** button (`%APPDATA%\WinThemeAuto\app.log`).
 7. Click **Apply** (always visible at the bottom). Settings save and apply immediately.
 
@@ -156,6 +156,8 @@ The **Settings** tab shows the current version (e.g. v0.2.6) and a **Check for u
 | `Apps` / `System` | Which registry values to manage. At least one should be on for auto-switch info to appear. |
 | `Light/Dark theme` | Full installed `.theme` for each mode — switches flags **plus** wallpaper. `System default` = flags only. |
 | `Light/Dark wallpaper` | Custom image path (`jpg/png/bmp`) per mode — wins over the theme wallpaper. `…` opens a file picker. Empty = theme only. |
+| `Sync lock screen` | Applies the per-mode image to the Windows lock screen on every switch (WinRT, no admin). |
+| `Light/Dark lock screen` | Custom lock image (`jpg/png`, local file <2 MB works best) per mode. Empty = same as desktop wallpaper (or theme). |
 | `Sync accent color` | Applies the per-mode accent on every switch — click a swatch to fill + apply instantly, or type hex. |
 | `Light/Dark accent` | Windows accent color per mode, e.g. `0078D4`. Needs **Show accent color on Start and taskbar** enabled for the taskbar to follow. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
@@ -190,6 +192,9 @@ Example:
   "dark_theme": "",
   "light_wallpaper": "C:/Wallpapers/day.jpg",
   "dark_wallpaper": "C:/Wallpapers/night.jpg",
+  "lockscreen_enabled": true,
+  "light_lockscreen": "C:/Wallpapers/lock-day.jpg",
+  "dark_lockscreen": "C:/Wallpapers/lock-night.jpg",
   "accent_enabled": true,
   "light_accent": "0078D4",
   "dark_accent": "4CC2FF",
@@ -211,6 +216,7 @@ Notes:
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
 - **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker or manual entry, validated on Apply) wins over the theme wallpaper. On a switch the wallpaper is applied via `SystemParametersInfoW` — no shell flashes, unlike launching `.theme` files.
+- **Lock screen (optional):** per-mode lock image via WinRT (`TrySetLockScreenImageAsync`, `LockScreen` fallback, STA-safe) — no admin, per-user. Custom lock path wins; empty falls back to the desktop wallpaper/theme image.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
 - **Scheduler:** at each scheduled switch (plus a 60 s safety net for clock changes and sleep/resume) the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
@@ -259,6 +265,7 @@ WinThemeAuto/
 │   ├── schedule.rs  # Fixed + sun scheduling, next-switch datetimes
 │   ├── sun.rs       # Offline sunrise/sunset math
 │   ├── theme.rs     # Registry read/write + broadcast
+│   ├── lockscreen.rs # WinRT lock screen image (TrySet + LockScreen fallback)
 │   ├── geo.rs       # IP geolocation (ipwho.is, ipapi.co fallback)
 │   ├── tray.rs      # Tray icon + menu
 │   ├── themes.rs    # Installed .theme enumeration + parsing
@@ -271,7 +278,7 @@ WinThemeAuto/
 └── Cargo.toml
 ```
 
-Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev-tests), `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `anyhow`, `rfd` (native file picker).
+Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev-tests), `serde` / `serde_json`, `ureq`, `dirs`, `windows-sys`, `windows` (WinRT lock screen), `anyhow`, `rfd` (native file picker).
 
 ## 🔒 Privacy
 
@@ -346,6 +353,8 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | `Nothing to toggle` | Enable at least one of **Apps** / **System**. |
 | `No switches` / `Polar day/night — stays …` | Expected above the Arctic Circle in summer/winter — theme stays fixed. |
 | `Light/Dark wallpaper not found` | The custom path must point to an existing file — use the `…` picker or fix the path. |
+| `Light/Dark lock screen not found` | Same for lock images — use the `…` picker; empty falls back to desktop. |
+| `Lock screen: …` | Shows the WinRT reason + `[ext, size]` — use a local `jpg/png` (<2 MB); `TrySet` false falls back to `LockScreen` API. |
 | `Light/Dark accent must be hex RGB` | Use 6 hex digits, e.g. `0078D4` (a leading `#` is fine too). |
 | Theme doesn't stick | Another app may be overwriting the registry keys; check for conflicting theme tools. |
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |

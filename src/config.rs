@@ -29,6 +29,9 @@ pub struct Config {
     pub dark_theme: String,
     pub light_wallpaper: String,
     pub dark_wallpaper: String,
+    pub lockscreen_enabled: bool,
+    pub light_lockscreen: String,
+    pub dark_lockscreen: String,
     pub accent_enabled: bool,
     pub light_accent: String,
     pub dark_accent: String,
@@ -55,6 +58,9 @@ impl Default for Config {
             dark_theme: String::new(),
             light_wallpaper: String::new(),
             dark_wallpaper: String::new(),
+            lockscreen_enabled: false,
+            light_lockscreen: String::new(),
+            dark_lockscreen: String::new(),
             accent_enabled: false,
             light_accent: "0078D4".to_string(),
             dark_accent: "0078D4".to_string(),
@@ -191,6 +197,15 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
     if let Some(s) = v.get("dark_wallpaper").and_then(|x| x.as_str()) {
         cfg.dark_wallpaper = s.trim().to_string();
     }
+    if let Some(b) = v.get("lockscreen_enabled").and_then(|x| x.as_bool()) {
+        cfg.lockscreen_enabled = b;
+    }
+    if let Some(s) = v.get("light_lockscreen").and_then(|x| x.as_str()) {
+        cfg.light_lockscreen = s.trim().to_string();
+    }
+    if let Some(s) = v.get("dark_lockscreen").and_then(|x| x.as_str()) {
+        cfg.dark_lockscreen = s.trim().to_string();
+    }
     if let Some(b) = v.get("accent_enabled").and_then(|x| x.as_bool()) {
         cfg.accent_enabled = b;
     }
@@ -317,6 +332,24 @@ mod tests {
         let d = Config::default();
         assert!(!d.accent_enabled);
         assert_eq!(d.light_accent, "0078D4");
+    }
+
+    #[test]
+    fn merged_parses_lockscreen_fields() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"lockscreen_enabled":true,"light_lockscreen":" C:\\l.jpg ","dark_lockscreen":"C:\\d.png"}"#,
+        )
+        .unwrap();
+        let c = from_value_merged(&v);
+        assert!(c.lockscreen_enabled);
+        assert_eq!(c.light_lockscreen, "C:\\l.jpg");
+        assert_eq!(c.dark_lockscreen, "C:\\d.png");
+        let d = Config::default();
+        assert!(!d.lockscreen_enabled);
+        assert_eq!(d.light_lockscreen, "");
+        assert_eq!(d.dark_lockscreen, "");
+        let old: Config = serde_json::from_str(r#"{"auto_enabled":true}"#).unwrap();
+        assert!(!old.lockscreen_enabled);
     }
 
     #[test]

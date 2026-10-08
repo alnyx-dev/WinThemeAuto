@@ -70,6 +70,9 @@ export component MainWindow inherits Window {
     in-out property <int> dark-theme-index;
     in-out property <string> light-wallpaper;
     in-out property <string> dark-wallpaper;
+    in-out property <bool> lockscreen-enabled;
+    in-out property <string> light-lockscreen;
+    in-out property <string> dark-lockscreen;
     in-out property <bool> accent-enabled;
     in-out property <string> light-accent;
     in-out property <string> dark-accent;
@@ -81,6 +84,10 @@ export component MainWindow inherits Window {
     in property <bool> light-wp-has;
     in property <image> dark-wp-preview;
     in property <bool> dark-wp-has;
+    in property <image> light-lock-preview;
+    in property <bool> light-lock-has;
+    in property <image> dark-lock-preview;
+    in property <bool> dark-lock-has;
 
     in property <string> t-tab-auto;
     in property <string> t-tab-appearance;
@@ -103,6 +110,10 @@ export component MainWindow inherits Window {
     in property <string> t-light-wp-ph;
     in property <string> t-dark-wp-ph;
     in property <string> t-wp-hint;
+    in property <string> t-lock-check;
+    in property <string> t-light-lock-ph;
+    in property <string> t-dark-lock-ph;
+    in property <string> t-lock-hint;
     in property <string> t-accent-check;
     in property <string> t-accent-hint;
     in property <string> t-rescan;
@@ -133,12 +144,16 @@ export component MainWindow inherits Window {
     callback detect-location();
     callback browse-light-wallpaper();
     callback browse-dark-wallpaper();
+    callback browse-light-lockscreen();
+    callback browse-dark-lockscreen();
     callback check-updates();
     callback cancel-update();
     callback open-releases();
     callback open-logs();
     callback clear-light-wallpaper();
     callback clear-dark-wallpaper();
+    callback clear-light-lockscreen();
+    callback clear-dark-lockscreen();
     callback refresh-themes();
     callback close-minimize();
     callback close-quit();
@@ -224,7 +239,7 @@ export component MainWindow inherits Window {
         }
 
         Rectangle {
-            height: 400px;
+            height: 500px;
             VerticalBox {
                 padding: 0px;
                 spacing: 0px;
@@ -525,6 +540,83 @@ export component MainWindow inherits Window {
                 }
                 Text {
                     text: root.t-wp-hint;
+                    font-size: 11px;
+                    color: #94a3b8;
+                    wrap: word-wrap;
+                }
+                Rectangle {
+                    height: 1px;
+                    background: #f1f5f9;
+                }
+                CheckBox {
+                    text: root.t-lock-check;
+                    checked <=> root.lockscreen-enabled;
+                    toggled => { root.settings-changed(); }
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    if root.light-lock-has : Rectangle {
+                        width: 56px;
+                        height: 32px;
+                        border-radius: 6px;
+                        clip: true;
+                        background: #00000022;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            source: root.light-lock-preview;
+                            image-fit: cover;
+                        }
+                    }
+                    LineEdit {
+                        text <=> root.light-lockscreen;
+                        placeholder-text: root.t-light-lock-ph;
+                        horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                    }
+                    Button {
+                        text: "…";
+                        clicked => { root.browse-light-lockscreen(); }
+                    }
+                    Button {
+                        text: "×";
+                        clicked => { root.clear-light-lockscreen(); }
+                    }
+                }
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 6px;
+                    if root.dark-lock-has : Rectangle {
+                        width: 56px;
+                        height: 32px;
+                        border-radius: 6px;
+                        clip: true;
+                        background: #00000022;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            source: root.dark-lock-preview;
+                            image-fit: cover;
+                        }
+                    }
+                    LineEdit {
+                        text <=> root.dark-lockscreen;
+                        placeholder-text: root.t-dark-lock-ph;
+                        horizontal-stretch: 1;
+                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                    }
+                    Button {
+                        text: "…";
+                        clicked => { root.browse-dark-lockscreen(); }
+                    }
+                    Button {
+                        text: "×";
+                        clicked => { root.clear-dark-lockscreen(); }
+                    }
+                }
+                Text {
+                    text: root.t-lock-hint;
                     font-size: 11px;
                     color: #94a3b8;
                     wrap: word-wrap;

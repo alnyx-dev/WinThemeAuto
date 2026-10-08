@@ -71,6 +71,9 @@ pub(crate) fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::Them
     ui.set_dark_theme_index(theme_index(themes, &cfg.dark_theme));
     ui.set_light_wallpaper(cfg.light_wallpaper.clone().into());
     ui.set_dark_wallpaper(cfg.dark_wallpaper.clone().into());
+    ui.set_lockscreen_enabled(cfg.lockscreen_enabled);
+    ui.set_light_lockscreen(cfg.light_lockscreen.clone().into());
+    ui.set_dark_lockscreen(cfg.dark_lockscreen.clone().into());
     ui.set_accent_enabled(cfg.accent_enabled);
     ui.set_light_accent(cfg.light_accent.clone().into());
     ui.set_dark_accent(cfg.dark_accent.clone().into());
@@ -79,6 +82,8 @@ pub(crate) fn load_into_ui(ui: &MainWindow, cfg: &Config, themes: &[themes::Them
     ui.set_close_never_ask(false);
     refresh_wallpaper_preview(ui, true);
     refresh_wallpaper_preview(ui, false);
+    refresh_lockscreen_preview(ui, true);
+    refresh_lockscreen_preview(ui, false);
 }
 
 pub(crate) fn apply_lang(ui: &MainWindow, lang: Lang) {
@@ -104,6 +109,10 @@ pub(crate) fn apply_lang(ui: &MainWindow, lang: Lang) {
     ui.set_t_light_wp_ph(s.light_wp_ph.into());
     ui.set_t_dark_wp_ph(s.dark_wp_ph.into());
     ui.set_t_wp_hint(s.wp_hint.into());
+    ui.set_t_lock_check(s.lock_check.into());
+    ui.set_t_light_lock_ph(s.light_lock_ph.into());
+    ui.set_t_dark_lock_ph(s.dark_lock_ph.into());
+    ui.set_t_lock_hint(s.lock_hint.into());
     ui.set_t_accent_check(s.accent_check.into());
     ui.set_t_accent_hint(s.accent_hint.into());
     ui.set_t_rescan(s.rescan.into());
@@ -263,6 +272,28 @@ pub(crate) fn refresh_wallpaper_preview(ui: &MainWindow, light: bool) {
     }
 }
 
+pub(crate) fn refresh_lockscreen_preview(ui: &MainWindow, light: bool) {
+    let path = if light {
+        ui.get_light_lockscreen()
+    } else {
+        ui.get_dark_lockscreen()
+    };
+    let path = path.trim().to_string();
+    let has = !path.is_empty() && PathBuf::from(&path).is_file();
+    let img = if has {
+        slint::Image::load_from_path(std::path::Path::new(&path)).unwrap_or_default()
+    } else {
+        slint::Image::default()
+    };
+    if light {
+        ui.set_light_lock_preview(img);
+        ui.set_light_lock_has(has);
+    } else {
+        ui.set_dark_lock_preview(img);
+        ui.set_dark_lock_has(has);
+    }
+}
+
 pub(crate) fn browse_wallpaper(ui: &MainWindow, light: bool, lang: Lang) {
     let title = i18n::msg(lang, if light { "pick_light" } else { "pick_dark" }, "");
     let weak = ui.as_weak();
@@ -282,6 +313,38 @@ pub(crate) fn browse_wallpaper(ui: &MainWindow, light: bool, lang: Lang) {
                 }
                 ui.set_dirty(true);
                 refresh_wallpaper_preview(&ui, light);
+            }
+        });
+    });
+}
+
+pub(crate) fn browse_lockscreen(ui: &MainWindow, light: bool, lang: Lang) {
+    let title = i18n::msg(
+        lang,
+        if light {
+            "pick_light_lock"
+        } else {
+            "pick_dark_lock"
+        },
+        "",
+    );
+    let weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let picked = rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter("Images", &["jpg", "jpeg", "png", "bmp"])
+            .pick_file();
+
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            if let Some(path) = picked {
+                let s: SharedString = path.to_string_lossy().into_owned().into();
+                if light {
+                    ui.set_light_lockscreen(s);
+                } else {
+                    ui.set_dark_lockscreen(s);
+                }
+                ui.set_dirty(true);
+                refresh_lockscreen_preview(&ui, light);
             }
         });
     });

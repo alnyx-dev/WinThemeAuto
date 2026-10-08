@@ -58,6 +58,10 @@ pub struct UiStrings {
     pub light_wp_ph: &'static str,
     pub dark_wp_ph: &'static str,
     pub wp_hint: &'static str,
+    pub lock_check: &'static str,
+    pub light_lock_ph: &'static str,
+    pub dark_lock_ph: &'static str,
+    pub lock_hint: &'static str,
     pub accent_check: &'static str,
     pub accent_hint: &'static str,
     pub rescan: &'static str,
@@ -108,6 +112,10 @@ pub fn ui(lang: Lang) -> UiStrings {
             light_wp_ph: "Light wallpaper (optional)…",
             dark_wp_ph: "Dark wallpaper (optional)…",
             wp_hint: "A custom path wins over the theme wallpaper. Empty = theme only.",
+            lock_check: "Sync lock screen with theme",
+            light_lock_ph: "Light lock screen (optional)…",
+            dark_lock_ph: "Dark lock screen (optional)…",
+            lock_hint: "Empty = same as desktop wallpaper (or theme).",
             accent_check: "Sync accent color with theme",
             accent_hint:
                 "Click a swatch to fill the field, then Apply — taskbar needs “Show accent color” on.",
@@ -156,6 +164,10 @@ pub fn ui(lang: Lang) -> UiStrings {
             light_wp_ph: "Светлые обои (необязательно)…",
             dark_wp_ph: "Тёмные обои (необязательно)…",
             wp_hint: "Свой путь важнее обоев темы. Пусто = только тема.",
+            lock_check: "Экран блокировки в цвет темы",
+            light_lock_ph: "Светлый локскрин (необязательно)…",
+            dark_lock_ph: "Тёмный локскрин (необязательно)…",
+            lock_hint: "Пусто = как рабочий стол (или тема).",
             accent_check: "Акцент в цвет темы",
             accent_hint:
                 "Клик заполняет поле — нажмите Применить. Для панели включите «Цвет в Пуске и на панели».",
@@ -201,6 +213,7 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "switch_fail" => "Failed to switch theme: {e}",
             "error" => "Error: {e}",
             "wallpaper" => "Wallpaper: {e}",
+            "lockscreen" => "Lock screen: {e}",
             "accent" => "Accent: {e}",
             "locating" => "Locating…",
             "geo_ok" => "Found via IP — {e}. Click Apply.",
@@ -218,6 +231,8 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "cancelled" => "Update cancelled.",
             "pick_light" => "Choose light-mode wallpaper",
             "pick_dark" => "Choose dark-mode wallpaper",
+            "pick_light_lock" => "Choose light-mode lock screen image",
+            "pick_dark_lock" => "Choose dark-mode lock screen image",
             "held" => "Manual theme — auto resumes at the next switch ({e})",
             "held_plain" => "Manual theme — auto paused until Apply",
             "need_coords" => "Enter coordinates for sunrise/sunset",
@@ -236,6 +251,7 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "switch_fail" => "Не удалось переключить тему: {e}",
             "error" => "Ошибка: {e}",
             "wallpaper" => "Обои: {e}",
+            "lockscreen" => "Блокировка: {e}",
             "accent" => "Акцент: {e}",
             "locating" => "Определение…",
             "geo_ok" => "Найдено по IP — {e}. Нажмите Применить.",
@@ -253,6 +269,8 @@ pub fn msg(lang: Lang, key: &str, arg: &str) -> String {
             "cancelled" => "Обновление отменено.",
             "pick_light" => "Выберите обои светлого режима",
             "pick_dark" => "Выберите обои тёмного режима",
+            "pick_light_lock" => "Выберите картинку блокировки светлого режима",
+            "pick_dark_lock" => "Выберите картинку блокировки тёмного режима",
             "held" => "Ручная тема — авто возобновится на следующем переключении ({e})",
             "held_plain" => "Ручная тема — авто на паузе до «Применить»",
             "need_coords" => "Введите координаты для восхода/заката",
@@ -280,6 +298,20 @@ pub fn wp_missing(lang: Lang, light: bool, path: &str) -> String {
                 "Светлые"
             } else {
                 "Тёмные"
+            }
+        ),
+    }
+}
+
+pub fn lock_missing(lang: Lang, light: bool, path: &str) -> String {
+    match lang {
+        Lang::En => format!("{} lock screen not found: {path}", mode_word(lang, light)),
+        Lang::Ru => format!(
+            "{} локскрин не найден: {path}",
+            if light {
+                "Светлый"
+            } else {
+                "Тёмный"
             }
         ),
     }
@@ -368,6 +400,10 @@ mod tests {
             en.onboard,
             en.cancel,
             en.logs,
+            en.lock_check,
+            en.light_lock_ph,
+            en.dark_lock_ph,
+            en.lock_hint,
             ru.tab_auto,
             ru.tab_appearance,
             ru.apply,
@@ -379,11 +415,16 @@ mod tests {
             ru.onboard,
             ru.cancel,
             ru.logs,
+            ru.lock_check,
+            ru.light_lock_ph,
+            ru.dark_lock_ph,
+            ru.lock_hint,
         ] {
             assert!(!s.is_empty());
         }
         assert_ne!(en.apply, ru.apply);
         assert_ne!(en.tab_settings, ru.tab_settings);
+        assert_ne!(en.lock_check, ru.lock_check);
     }
 
     #[test]

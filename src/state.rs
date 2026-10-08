@@ -10,6 +10,7 @@ pub struct State {
     pub update_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub last_titlebar_sys: Option<Theme>,
     pub last_wallpaper: Option<PathBuf>,
+    pub last_lockscreen: Option<PathBuf>,
     pub last_accent: Option<u32>,
     pub last_tray_tooltip: Option<String>,
     pub last_tray_dark: Option<bool>,
@@ -85,4 +86,94 @@ pub(crate) fn resolve_wallpaper_path(
         .iter()
         .find(|t| t.path.to_string_lossy() == *configured)
         .and_then(|t| t.wallpaper.clone())
+}
+
+pub(crate) fn resolve_lock_wallpaper_path(
+    cfg: &Config,
+    themes: &[themes::ThemeEntry],
+    want: Theme,
+) -> Option<PathBuf> {
+    if !cfg.lockscreen_enabled {
+        return None;
+    }
+    let custom = if want == Theme::Light {
+        &cfg.light_lockscreen
+    } else {
+        &cfg.dark_lockscreen
+    };
+    if !custom.is_empty() {
+        return Some(PathBuf::from(custom));
+    }
+    // Fallback: same as desktop (custom desktop wallpaper or .theme wallpaper).
+    resolve_wallpaper_path(cfg, themes, want)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str, wallpaper: Option<&str>) -> themes::ThemeEntry {
+        themes::ThemeEntry {
+            name: "T".to_string(),
+            path: PathBuf::from(path),
+            wallpaper: wallpaper.map(PathBuf::from),
+            system_mode: None,
+            app_mode: None,
+            user: false,
+        }
+    }
+
+    #[test]
+    fn lock_disabled_returns_none() {
+        let cfg = Config::default();
+        assert_eq!(resolve_lock_wallpaper_path(&cfg, &[], Theme::Light), None);
+    }
+
+    #[test]
+    fn lock_custom_wins_over_desktop_and_theme() {
+        let cfg = Config {
+            lockscreen_enabled: true,
+            light_lockscreen: "C:\\lock-light.jpg".to_string(),
+            light_wallpaper: "C:\\desk-light.jpg".to_string(),
+            light_theme: "C:\\t.theme".to_string(),
+            ..Config::default()
+        };
+        let themes = vec![entry("C:\\t.theme", Some("C:\\theme-wp.jpg"))];
+        assert_eq!(
+            resolve_lock_wallpaper_path(&cfg, &themes, Theme::Light),
+            Some(PathBuf::from("C:\\lock-light.jpg"))
+        );
+    }
+
+    #[test]
+    fn lock_falls_back_to_desktop_then_theme() {
+        let themes = vec![entry("C:\\t.theme", Some("C:\\theme-wp.jpg"))];
+        let cfg = Config {
+            lockscreen_enabled: true,
+            light_wallpaper: "C:\\desk-light.jpg".to_string(),
+            light_theme: "C:\\t.theme".to_string(),
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_lock_wallpaper_path(&cfg, &themes, Theme::Light),
+            Some(PathBuf::from("C:\\desk-light.jpg"))
+        );
+        let cfg = Config {
+            lockscreen_enabled: true,
+            light_theme: "C:\\t.theme".to_string(),
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_lock_wallpaper_path(&cfg, &themes, Theme::Light),
+            Some(PathBuf::from("C:\\theme-wp.jpg"))
+        );
+        let cfg = Config {
+            lockscreen_enabled: true,
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_lock_wallpaper_path(&cfg, &themes, Theme::Dark),
+            None
+        );
+    }
 }

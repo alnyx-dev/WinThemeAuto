@@ -2,11 +2,16 @@ use crate::{
     accent, autostart,
     config::{Config, Mode},
     i18n::{self, Lang},
-    log, schedule,
-    state::{clear_hold, resolve_wallpaper_path, set_hold, theme_path, Shared, State},
+    lockscreen, log, schedule,
+    state::{
+        clear_hold, resolve_lock_wallpaper_path, resolve_wallpaper_path, set_hold, theme_path,
+        Shared, State,
+    },
     theme::{self, Theme},
     tray,
-    ui::{force_light_titlebar, refresh_wallpaper_preview, update_lang_ui},
+    ui::{
+        force_light_titlebar, refresh_lockscreen_preview, refresh_wallpaper_preview, update_lang_ui,
+    },
     update, MainWindow,
 };
 use chrono::{Local, NaiveTime};
@@ -79,6 +84,7 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                         st.last_scheduled = Some(want);
                     }
                     apply_wallpaper(ui, &mut st, want);
+                    apply_lockscreen(ui, &mut st, want);
                     apply_accent(ui, &mut st, want);
                 }
             } else {
@@ -181,6 +187,29 @@ pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
     }
 }
 
+pub(crate) fn apply_lockscreen(ui: &MainWindow, st: &mut State, want: Theme) {
+    let Some(path) = resolve_lock_wallpaper_path(&st.cfg, &st.themes, want) else {
+        return;
+    };
+    if st.last_lockscreen.as_ref() == Some(&path) {
+        return;
+    }
+    if !path.exists() {
+        return;
+    }
+    match lockscreen::set_image(&path) {
+        Ok(()) => {
+            st.last_lockscreen = Some(path.clone());
+            log::info(format!("lock screen: applied {}", path.display()));
+        }
+        Err(e) => {
+            log::warn(format!("lock screen failed: {e:#}"));
+            let lang = Lang::from_code(&st.cfg.language);
+            ui.set_status(i18n::msg(lang, "lockscreen", &format!("{e:#}")).into());
+        }
+    }
+}
+
 pub(crate) fn toggle(ui: &MainWindow, state: &Shared, tray: &Rc<tray::Tray>, timer: &Rc<Timer>) {
     let (apps, system, lang, auto_enabled) = {
         let st = state.lock().unwrap();
@@ -204,6 +233,7 @@ pub(crate) fn toggle(ui: &MainWindow, state: &Shared, tray: &Rc<tray::Tray>, tim
             ));
             ui.set_is_dark(new == Theme::Dark);
             apply_wallpaper(ui, &mut state.lock().unwrap(), new);
+            apply_lockscreen(ui, &mut state.lock().unwrap(), new);
             apply_accent(ui, &mut state.lock().unwrap(), new);
             if auto_enabled {
                 let now = Local::now();
@@ -455,6 +485,19 @@ pub(crate) fn apply_settings(
         }
     }
 
+    let lockscreen_enabled = ui.get_lockscreen_enabled();
+    let light_lockscreen = ui.get_light_lockscreen().trim().to_string();
+    let dark_lockscreen = ui.get_dark_lockscreen().trim().to_string();
+    if lockscreen_enabled {
+        for (light, p) in [(true, &light_lockscreen), (false, &dark_lockscreen)] {
+            if !p.is_empty() && !PathBuf::from(p).is_file() {
+                ui.set_tab_index(1);
+                ui.set_status(i18n::lock_missing(lang, light, p).into());
+                return;
+            }
+        }
+    }
+
     let accent_enabled = ui.get_accent_enabled();
     let light_accent = ui.get_light_accent().trim().to_string();
     let dark_accent = ui.get_dark_accent().trim().to_string();
@@ -490,6 +533,9 @@ pub(crate) fn apply_settings(
         dark_theme,
         light_wallpaper,
         dark_wallpaper,
+        lockscreen_enabled,
+        light_lockscreen,
+        dark_lockscreen,
         accent_enabled,
         light_accent,
         dark_accent,
@@ -508,6 +554,7 @@ pub(crate) fn apply_settings(
         st.cfg = new_cfg;
         st.last_scheduled = None;
         st.last_wallpaper = None;
+        st.last_lockscreen = None;
         st.last_accent = None;
     }
 
@@ -525,6 +572,7 @@ pub(crate) fn apply_settings(
             theme::effective_current(st.cfg.change_apps, st.cfg.change_system)
         };
         apply_wallpaper(ui, &mut state.lock().unwrap(), cur);
+        apply_lockscreen(ui, &mut state.lock().unwrap(), cur);
         apply_accent(ui, &mut state.lock().unwrap(), cur);
     }
 
@@ -532,6 +580,8 @@ pub(crate) fn apply_settings(
 
     refresh_wallpaper_preview(ui, true);
     refresh_wallpaper_preview(ui, false);
+    refresh_lockscreen_preview(ui, true);
+    refresh_lockscreen_preview(ui, false);
 
     ui.set_dirty(false);
     if ui.get_status().as_str() == status_before.as_str() {
@@ -553,6 +603,7 @@ mod tests {
             update_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             last_titlebar_sys: None,
             last_wallpaper: None,
+            last_lockscreen: None,
             last_accent: None,
             last_tray_tooltip: None,
             last_tray_dark: None,

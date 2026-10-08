@@ -7,6 +7,7 @@ mod cli;
 mod config;
 mod geo;
 mod i18n;
+mod lockscreen;
 mod log;
 mod schedule;
 mod single_instance;
@@ -23,13 +24,14 @@ use chrono::Local;
 use config::Config;
 use i18n::Lang;
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
-use state::{resolve_wallpaper_path, Shared, State};
+use state::{resolve_lock_wallpaper_path, resolve_wallpaper_path, Shared, State};
 use std::{rc::Rc, sync::Arc, time::Duration};
 use theme::Theme;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 use ui::{
-    apply_autostart_instant, apply_language_instant, browse_wallpaper, detect_location,
-    load_into_ui, refresh_themes, refresh_wallpaper_preview, show_window,
+    apply_autostart_instant, apply_language_instant, browse_lockscreen, browse_wallpaper,
+    detect_location, load_into_ui, refresh_lockscreen_preview, refresh_themes,
+    refresh_wallpaper_preview, show_window,
 };
 
 slint::include_modules!();
@@ -85,6 +87,13 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
         if path.exists() {
             if let Err(e) = theme::set_wallpaper(&path) {
                 eprintln!("Wallpaper: {e}");
+            }
+        }
+    }
+    if let Some(path) = resolve_lock_wallpaper_path(&cfg, &themes, want) {
+        if path.exists() {
+            if let Err(e) = lockscreen::set_image(&path) {
+                eprintln!("Lock screen: {e}");
             }
         }
     }
@@ -204,6 +213,7 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         update_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         last_titlebar_sys: None,
         last_wallpaper: None,
+        last_lockscreen: None,
         last_accent: None,
         last_tray_tooltip: None,
         last_tray_dark: None,
@@ -367,6 +377,24 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         });
     }
     {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_browse_light_lockscreen(move || {
+            if let Some(ui) = w.upgrade() {
+                let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
+                browse_lockscreen(&ui, true, lang);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_browse_dark_lockscreen(move || {
+            if let Some(ui) = w.upgrade() {
+                let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
+                browse_lockscreen(&ui, false, lang);
+            }
+        });
+    }
+    {
         let w = ui.as_weak();
         ui.on_clear_light_wallpaper(move || {
             if let Some(ui) = w.upgrade() {
@@ -383,6 +411,26 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
                 ui.set_dark_wallpaper("".into());
                 ui.set_dirty(true);
                 refresh_wallpaper_preview(&ui, false);
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        ui.on_clear_light_lockscreen(move || {
+            if let Some(ui) = w.upgrade() {
+                ui.set_light_lockscreen("".into());
+                ui.set_dirty(true);
+                refresh_lockscreen_preview(&ui, true);
+            }
+        });
+    }
+    {
+        let w = ui.as_weak();
+        ui.on_clear_dark_lockscreen(move || {
+            if let Some(ui) = w.upgrade() {
+                ui.set_dark_lockscreen("".into());
+                ui.set_dirty(true);
+                refresh_lockscreen_preview(&ui, false);
             }
         });
     }
