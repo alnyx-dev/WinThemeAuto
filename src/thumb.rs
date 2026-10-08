@@ -76,7 +76,7 @@ fn thumbnail_rgba(path: &Path) -> Option<(u32, u32, Vec<u8>)> {
             windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
         );
     }
-    let hpath = HSTRING::from(path.to_string_lossy().as_ref());
+    let hpath = HSTRING::from(crate::slideshow::shell_path(path).as_str());
 
     unsafe {
         let factory: IShellItemImageFactory = SHCreateItemFromParsingName(&hpath, None).ok()?;

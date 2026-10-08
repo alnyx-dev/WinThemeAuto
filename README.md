@@ -54,7 +54,7 @@ _A tiny, fast, native Windows app written in Rust. No Electron, no background se
 - **Instant apply** — broadcasts `WM_SETTINGCHANGE` / `WM_THEMECHANGED` and refreshes taskbars so apps pick up the change immediately
 - **Robust config** — tolerant JSON parsing, validation/clamping, atomic saves, corrupt-file backup
 - 🖼️ **Full Windows themes** — pick a light and a dark `.theme` from installed ones; the wallpaper follows the switch, silently. Or point each mode at **any image file** — custom wallpapers win over theme ones
-- 🎞️ **Wallpaper slideshows** — point a mode at a **folder** of images instead of a file and Windows rotates them natively (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle
+- 🎞️ **Wallpaper slideshows** — point a mode at a **folder** of images instead of a file and Windows rotates them natively (`IDesktopWallpaper`), with shared interval (1–1440 min) and shuffle; each theme switch moves an already-active slideshow to the next image
 - 🔒 **Lock screen sync** — per-mode lock screen images via WinRT (no admin), with desktop/theme fallback
 - 🎨 **Accent color sync** — different Windows accent per light/dark mode, applied on every switch
 - 🔄 **Self-updates** — one click checks GitHub Releases, downloads the newest exe (x64/x86 auto-matched) and installs it with a restart
@@ -221,7 +221,7 @@ Notes:
 ## 🧠 How it works
 
 - **Theme control:** reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and `SystemUsesLightTheme` (`1` = light, `0` = dark).
-- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker, folder picker or manual entry, validated on Apply) wins over the theme wallpaper. A single image is applied via `SystemParametersInfoW`; a folder becomes a native Windows slideshow via `IDesktopWallpaper::SetSlideshow` (+ interval/shuffle) — no shell flashes, unlike launching `.theme` files.
+- **Full themes (optional):** installed `.theme` files are enumerated from `C:\Windows\Resources\Themes` and `%LOCALAPPDATA%\Microsoft\Windows\Themes` (UTF-8/UTF-16 aware, `SystemMode`/`AppMode` + wallpaper parsed). A **custom wallpaper path** per mode (file picker, folder picker or manual entry, validated on Apply) wins over the theme wallpaper. A single image is applied via `SystemParametersInfoW`; a folder becomes a native Windows slideshow via `IDesktopWallpaper::SetSlideshow` (+ interval/shuffle) — no shell flashes, unlike launching `.theme` files. When a switch lands on an already-active slideshow folder it advances to the next image (`AdvanceSlideshow`); a freshly configured folder starts at its first image.
 - **Lock screen (optional):** per-mode lock image via WinRT (`TrySetLockScreenImageAsync`, `LockScreen` fallback, STA-safe) — no admin, per-user. Custom lock path wins; empty falls back to the desktop wallpaper/theme image.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
 - **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
@@ -368,6 +368,10 @@ Uncheck one of **Apps** / **System** and toggle manually — e.g. dark apps with
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.6.2
+- ⏭️ Slideshow advance: each theme switch moves an already-active slideshow to the next image (`AdvanceSlideshow`); freshly configured folders start at the first image
+- 🩹 Fixed `E_INVALIDARG` (`cannot open folder`) for slideshow folders: extended `\\?\` paths are stripped before shell calls
 
 ### v0.6.1
 - 🪶 Bounded-RAM previews: wallpaper/lock thumbnails via the shell thumbnail API (320×180) instead of full-file decode — fixes 300+ MB usage with large (4K/8K) wallpapers

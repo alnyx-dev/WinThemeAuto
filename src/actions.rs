@@ -58,6 +58,11 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
 
         if st.cfg.auto_enabled {
             if let Some(want) = schedule::desired_theme(&st.cfg, now) {
+                // A genuine theme change since the previous tick: only then
+                // may an already-active slideshow advance (safety-net ticks
+                // must not spin it).
+                let prev_scheduled = st.last_scheduled;
+                let switched = matches!(prev_scheduled, Some(p) if p != want);
                 if schedule::hold_active(&st.cfg, want, now) {
                     st.last_scheduled = Some(want);
                 } else {
@@ -83,7 +88,7 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                     } else {
                         st.last_scheduled = Some(want);
                     }
-                    apply_wallpaper(ui, &mut st, want);
+                    apply_wallpaper(ui, &mut st, want, switched);
                     apply_lockscreen(ui, &mut st, want);
                     apply_accent(ui, &mut st, want);
                 }
@@ -167,24 +172,40 @@ pub(crate) fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
     }
 }
 
-pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme) {
+pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme, switched: bool) {
     let Some(path) = resolve_wallpaper_path(&st.cfg, &st.themes, want) else {
         return;
     };
-    let interval = slideshow::clamp_interval(st.cfg.slideshow_interval_min);
-    let key = slideshow::applied_key(&path, interval, st.cfg.slideshow_shuffle);
-    if st.last_wallpaper.as_ref() == Some(&key) {
-        return;
-    }
     if !path.exists() {
         return;
     }
-    match slideshow::apply_desktop(&path, interval, st.cfg.slideshow_shuffle) {
-        Ok(()) => st.last_wallpaper = Some(key),
-        Err(e) => {
-            log::warn(format!("wallpaper failed: {e:#}"));
-            let lang = Lang::from_code(&st.cfg.language);
-            ui.set_status(i18n::msg(lang, "wallpaper", &e.to_string()).into());
+    let interval = slideshow::clamp_interval(st.cfg.slideshow_interval_min);
+    let shuffle = st.cfg.slideshow_shuffle;
+    let key = slideshow::applied_key(&path, interval, shuffle);
+    let key_changed = st.last_wallpaper.as_ref() != Some(&key);
+    let fail = |ui: &MainWindow, st: &State, e: &anyhow::Error| {
+        log::warn(format!("wallpaper failed: {e:#}"));
+        let lang = Lang::from_code(&st.cfg.language);
+        ui.set_status(i18n::msg(lang, "wallpaper", &e.to_string()).into());
+    };
+    match slideshow::plan_apply(path.is_dir(), key_changed, switched) {
+        slideshow::ApplyPlan::Skip => {}
+        slideshow::ApplyPlan::SetSingle => match theme::set_wallpaper(&path) {
+            Ok(()) => st.last_wallpaper = Some(key),
+            Err(e) => fail(ui, st, &e),
+        },
+        slideshow::ApplyPlan::ConfigureShow => {
+            match slideshow::set_slideshow(&path, interval, shuffle) {
+                Ok(()) => st.last_wallpaper = Some(key),
+                Err(e) => fail(ui, st, &e),
+            }
+        }
+        slideshow::ApplyPlan::AdvanceShow => {
+            // Folder already active: move to the next image. The key
+            // already matches, so nothing else to record.
+            if let Err(e) = slideshow::advance() {
+                fail(ui, st, &e);
+            }
         }
     }
 }
@@ -244,7 +265,7 @@ pub(crate) fn toggle(ui: &MainWindow, state: &Shared, tray: &Rc<tray::Tray>, tim
                 if new == Theme::Dark { "dark" } else { "light" }
             ));
             ui.set_is_dark(new == Theme::Dark);
-            apply_wallpaper(ui, &mut state.lock().unwrap(), new);
+            apply_wallpaper(ui, &mut state.lock().unwrap(), new, true);
             apply_lockscreen(ui, &mut state.lock().unwrap(), new);
             apply_accent(ui, &mut state.lock().unwrap(), new);
             if auto_enabled {
@@ -607,7 +628,7 @@ pub(crate) fn apply_settings(
             let st = state.lock().unwrap();
             theme::effective_current(st.cfg.change_apps, st.cfg.change_system)
         };
-        apply_wallpaper(ui, &mut state.lock().unwrap(), cur);
+        apply_wallpaper(ui, &mut state.lock().unwrap(), cur, false);
         apply_lockscreen(ui, &mut state.lock().unwrap(), cur);
         apply_accent(ui, &mut state.lock().unwrap(), cur);
     }

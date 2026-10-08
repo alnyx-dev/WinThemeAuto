@@ -87,8 +87,24 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
     let themes = themes::enumerate();
     if let Some(path) = resolve_wallpaper_path(&cfg, &themes, want) {
         if path.exists() {
-            let interval = slideshow::clamp_interval(cfg.slideshow_interval_min);
-            if let Err(e) = slideshow::apply_desktop(&path, interval, cfg.slideshow_shuffle) {
+            if path.is_dir() {
+                // A CLI call is always an explicit switch: advance the
+                // already-active slideshow, or configure it fresh.
+                let already_active = slideshow::active_source_dir()
+                    .map(|d| slideshow::same_dir(&d, &path))
+                    .unwrap_or(false);
+                if already_active {
+                    if let Err(e) = slideshow::advance() {
+                        eprintln!("Wallpaper: {e}");
+                    }
+                } else {
+                    let interval = slideshow::clamp_interval(cfg.slideshow_interval_min);
+                    if let Err(e) = slideshow::set_slideshow(&path, interval, cfg.slideshow_shuffle)
+                    {
+                        eprintln!("Wallpaper: {e}");
+                    }
+                }
+            } else if let Err(e) = theme::set_wallpaper(&path) {
                 eprintln!("Wallpaper: {e}");
             }
         }
