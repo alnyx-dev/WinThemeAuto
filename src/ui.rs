@@ -279,7 +279,7 @@ pub(crate) fn refresh_wallpaper_preview(ui: &MainWindow, light: bool) {
     let has = preview_file.as_ref().is_some_and(|p| p.is_file());
     let img = preview_file
         .as_deref()
-        .map(|p| slint::Image::load_from_path(p).unwrap_or_default())
+        .map(preview_image)
         .unwrap_or_default();
     if light {
         ui.set_light_wp_preview(img);
@@ -299,7 +299,7 @@ pub(crate) fn refresh_lockscreen_preview(ui: &MainWindow, light: bool) {
     let path = path.trim().to_string();
     let has = !path.is_empty() && PathBuf::from(&path).is_file();
     let img = if has {
-        slint::Image::load_from_path(std::path::Path::new(&path)).unwrap_or_default()
+        preview_image(std::path::Path::new(&path))
     } else {
         slint::Image::default()
     };
@@ -309,6 +309,24 @@ pub(crate) fn refresh_lockscreen_preview(ui: &MainWindow, light: bool) {
     } else {
         ui.set_dark_lock_preview(img);
         ui.set_dark_lock_has(has);
+    }
+}
+
+/// Preview with bounded RAM: a shell thumbnail first, a full decode only
+/// for small files, otherwise an empty placeholder. Full-size photos must
+/// never be decoded just to fill a 56x32 thumbnail (a 4K image is ~33 MB).
+fn preview_image(path: &std::path::Path) -> slint::Image {
+    if let Some(img) = crate::thumb::load_thumbnail(path) {
+        return img;
+    }
+    const SMALL_MAX: u64 = 8 * 1024 * 1024;
+    let small = std::fs::metadata(path)
+        .map(|m| m.len() <= SMALL_MAX)
+        .unwrap_or(false);
+    if small {
+        slint::Image::load_from_path(path).unwrap_or_default()
+    } else {
+        slint::Image::default()
     }
 }
 

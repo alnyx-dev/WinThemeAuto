@@ -16,6 +16,7 @@ mod state;
 mod sun;
 mod theme;
 mod themes;
+mod thumb;
 mod tray;
 mod ui;
 mod update;
