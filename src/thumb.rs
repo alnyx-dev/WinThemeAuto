@@ -20,10 +20,50 @@ pub fn load_thumbnail(path: &Path) -> Option<slint::Image> {
     if w == 0 || h == 0 || px.len() != w as usize * h as usize * 4 {
         return None;
     }
+    // Providers may ignore the requested size (seen on CI runners), so fit
+    // the pixels ourselves — the output is bounded no matter what.
+    let (w, h, px) = downscale_to_fit(w, h, &px, PREVIEW_W as u32, PREVIEW_H as u32);
     let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&px, w, h);
     Some(slint::Image::from_rgba8(buf))
 }
 
+/// Box-average downscale so the result fits within `max_w` x `max_h`.
+/// Returns the input unchanged when it already fits.
+fn downscale_to_fit(w: u32, h: u32, px: &[u8], max_w: u32, max_h: u32) -> (u32, u32, Vec<u8>) {
+    if w <= max_w && h <= max_h {
+        return (w, h, px.to_vec());
+    }
+    let scale = (max_w as f64 / w as f64)
+        .min(max_h as f64 / h as f64)
+        .min(1.0);
+    let nw = ((w as f64 * scale).round() as u32).max(1).min(max_w);
+    let nh = ((h as f64 * scale).round() as u32).max(1).min(max_h);
+    let mut out = vec![0u8; nw as usize * nh as usize * 4];
+    for y in 0..nh {
+        let sy0 = (y as f64 / scale) as u32;
+        let sy1 = (((y + 1) as f64 / scale).ceil() as u32).clamp(sy0 + 1, h);
+        for x in 0..nw {
+            let sx0 = (x as f64 / scale) as u32;
+            let sx1 = (((x + 1) as f64 / scale).ceil() as u32).clamp(sx0 + 1, w);
+            let mut acc = [0u64; 4];
+            let mut n = 0u64;
+            for sy in sy0..sy1 {
+                for sx in sx0..sx1 {
+                    let o = (sy as usize * w as usize + sx as usize) * 4;
+                    for c in 0..4 {
+                        acc[c] += px[o + c] as u64;
+                    }
+                    n += 1;
+                }
+            }
+            let o = (y as usize * nw as usize + x as usize) * 4;
+            for c in 0..4 {
+                out[o + c] = (acc[c] / n.max(1)) as u8;
+            }
+        }
+    }
+    (nw, nh, out)
+}
 fn thumbnail_rgba(path: &Path) -> Option<(u32, u32, Vec<u8>)> {
     use windows::core::HSTRING;
     use windows::Win32::UI::Shell::{
@@ -153,6 +193,26 @@ mod tests {
         let size = img.size();
         assert!(size.width > 0 && size.height > 0);
         assert!(size.width <= 320 && size.height <= 180);
+    }
+
+    #[test]
+    fn downscale_fits_and_averages() {
+        // 4x2 gradient in R, constant G/B/A.
+        let mut px = Vec::new();
+        for v in [0u8, 64, 128, 255, 10, 20, 30, 40] {
+            px.extend_from_slice(&[v, 100, 150, 255]);
+        }
+        // 4x2 at scale 0.5 -> 2x1; each dest pixel averages a 2x2 block.
+        let (w, h, out) = downscale_to_fit(4, 2, &px, 2, 2);
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(out[0], (0u8 + 64 + 10 + 20) / 4); // 23
+        assert_eq!(&out[1..4], &[100, 150, 255]);
+        assert_eq!(out[4], ((128u32 + 255 + 30 + 40) / 4) as u8); // 113
+        assert_eq!(&out[5..8], &[100, 150, 255]);
+        // Already-fitting input is returned unchanged.
+        let (w, h, out) = downscale_to_fit(2, 2, &px[..16], 320, 180);
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(out.as_slice(), &px[..16]);
     }
 
     #[test]
