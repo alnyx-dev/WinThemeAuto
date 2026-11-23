@@ -38,6 +38,21 @@
 <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e0f12" media="(prefers-color-scheme: dark)">
 <script>
+// Start at the top on reload unless the URL points to a specific section.
+(function () {
+  var navigation = performance.getEntriesByType("navigation")[0];
+  if (!navigation || navigation.type !== "reload" || location.hash ||
+      !("scrollRestoration" in history)) return;
+  history.scrollRestoration = "manual";
+  window.scrollTo(0, 0);
+  window.addEventListener("pageshow", function () {
+    requestAnimationFrame(function () {
+      if (!location.hash) window.scrollTo(0, 0);
+      history.scrollRestoration = "auto";
+    });
+  }, { once: true });
+})();
+
 // No-flash theme boot: saved choice, else the OS theme.
 (function () {
   try {
@@ -52,7 +67,6 @@
 })();
 </script>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<noscript><style>.reveal,.rise{opacity:1!important;transform:none!important;filter:none!important}.reveal .glyph{opacity:1!important;transform:none!important}</style></noscript>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
@@ -77,6 +91,9 @@
        (same tag → same color). Lightness flips per theme below. */
     --ver-h: 32;
     --ver-l: 34%;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --scroll-dawn: #b45309;
+    --scroll-dusk: #6253a3;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -93,6 +110,8 @@
       --glow-2: rgba(102, 85, 129, 0.18);
       --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
       --ver-l: 70%;
+      --scroll-dawn: #f0b35e;
+      --scroll-dusk: #918aeb;
     }
   }
   :root[data-theme="dark"] {
@@ -109,13 +128,30 @@
     --glow-2: rgba(102, 85, 129, 0.18);
     --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
     --ver-l: 70%;
+    --scroll-dawn: #f0b35e;
+    --scroll-dusk: #918aeb;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::selection { background: var(--select-bg, #f5b35e); color: var(--select-fg, #241a08); }
   html {
-    scroll-behavior: smooth;
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--muted) 72%, var(--bg)) var(--bg);
+    scrollbar-color: var(--scroll-dusk) var(--bg);
+  }
+  @media (forced-colors: none) {
+    @supports selector(html::-webkit-scrollbar) {
+      html { scrollbar-width: auto; scrollbar-color: auto; }
+      html::-webkit-scrollbar { width: 12px; }
+      html::-webkit-scrollbar-track {
+        background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
+      }
+      html::-webkit-scrollbar-thumb {
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background: linear-gradient(var(--scroll-dawn), var(--scroll-dusk)) padding-box;
+      }
+      html::-webkit-scrollbar-thumb:hover { border-width: 2px; }
+      html::-webkit-scrollbar-thumb:active { border-width: 1px; }
+    }
   }
   @media (forced-colors: active) {
     html { scrollbar-width: auto; scrollbar-color: auto; }
@@ -125,12 +161,24 @@
     z-index: 60;
     min-width: min(188px, calc(100vw - 16px));
     max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
     padding: 4px;
     border: 1px solid var(--border);
     border-radius: 9px;
     background: var(--card);
     box-shadow: 0 6px 24px #0002;
     color: var(--fg);
+  }
+  .page-menu[hidden] { display: none; }
+  .page-menu:focus { outline: none; }
+  .page-menu:not([hidden]) {
+    transform-origin: var(--menu-origin, top left);
+    animation: menu-in 190ms var(--ease-out) both;
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
   }
   .page-menu [role="menuitem"] {
     display: block;
@@ -362,13 +410,6 @@
   .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex: none; }
   .live-chip b { font-weight: 600; }
   .live-chip span { color: var(--muted); font-variant-numeric: tabular-nums; }
-  /* Gentle breathing for the live status chip; uses `translate`
-     so it never fights the mobile centering transform. */
-  .live-chip { animation: bob 6s ease-in-out infinite; }
-  @keyframes bob {
-    0%, 100% { translate: 0 0; }
-    50% { translate: 0 -5px; }
-  }
 
   section { padding: 8px 0 64px; }
   h2 {
@@ -458,17 +499,20 @@
   }
   .glyph svg { width: 22px; height: 22px; display: block; }
   /* Icon pop: glyph springs in just after its card, nudges on hover. */
-  .reveal .glyph { opacity: 0; transform: scale(0.5); }
-  .reveal.in .glyph {
-    opacity: 1;
-    transform: scale(1);
-    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s, opacity 0.35s ease 0.12s;
-  }
   .bcard:hover .glyph { transform: translateY(-2px) scale(1.06); transition-delay: 0s; }
   .bcard h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
   .bcard p { color: var(--muted); font-size: 14.5px; flex: 1; }
-  .reveal { opacity: 0; transform: translateY(26px) scale(0.985); filter: blur(6px); transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), filter 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
-  .reveal.in { opacity: 1; transform: none; filter: blur(0); }
+  .reveal-pending:not(:focus-within) { opacity: 0; }
+  .reveal-in { animation: section-in 440ms var(--ease-out) var(--reveal-delay, 0ms) both; }
+  .reveal-in .glyph { animation: glyph-in 360ms var(--ease-out) var(--reveal-delay, 0ms) both; }
+  @keyframes section-in {
+    from { opacity: 0; translate: 0 14px; }
+    to { opacity: 1; translate: 0 0; }
+  }
+  @keyframes glyph-in {
+    from { scale: 0.92; }
+    to { scale: 1; }
+  }
 
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
   .step { position: relative; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
@@ -503,21 +547,24 @@
   footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
   footer nav { display: flex; gap: 18px; padding: 0; }
 
-  @keyframes rise {
-    from { opacity: 0; transform: translateY(18px); }
-    to { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: no-preference) {
+    .rise { animation: section-in 460ms var(--ease-out) both; }
+    .d2 { animation-delay: 35ms; }
+    .d3 { animation-delay: 85ms; }
+    .d4 { animation-delay: 135ms; }
+    .d5 { animation-delay: 185ms; }
+    .d6 { animation-delay: 220ms; }
+    .hero-art.rise { animation-name: illustration-in; }
   }
-  .rise { opacity: 0; animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.14s; } .d3 { animation-delay: 0.23s; }
-  .d4 { animation-delay: 0.32s; } .d5 { animation-delay: 0.4s; } .d6 { animation-delay: 0.48s; }
+  @keyframes illustration-in {
+    from { opacity: 0; scale: 0.975; }
+    to { opacity: 1; scale: 1; }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .rise { opacity: 1; animation: none; }
-    .live-chip { animation: none; }
-    .btn:hover::after, .btn:focus-visible::after { animation: none; }
-    * { transition: none !important; }
-    html { scroll-behavior: auto; }
+    .reveal-pending:not(:focus-within) { opacity: 1; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
-  @media (max-width: 760px) {
+  @media (max-width: 800px) {
     .wrap { padding: 0 18px; }
     nav { padding: 16px 0; flex-wrap: wrap; row-gap: 12px; }
     .brand { font-size: 15px; }
@@ -725,7 +772,7 @@
 
 </div>
 
-<div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>
+<div class="page-menu" id="page-menu" role="menu" tabindex="-1" aria-label="Page actions" hidden>
   <a id="menu-download" role="menuitem" tabindex="-1" data-i18n="menu_dl" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x64.exe">Download for Windows</a>
   <a role="menuitem" tabindex="-1" data-i18n="allrel" href="https://github.com/alnyx-dev/WinThemeAuto/releases">All releases</a>
   <button id="menu-top" type="button" role="menuitem" tabindex="-1" data-i18n="menu_top">Back to top</button>
@@ -1194,19 +1241,23 @@
       menu.style.left = "0px";
       menu.style.top = "0px";
       menu.hidden = false;
-      var bounds = menu.getBoundingClientRect();
       var viewport = document.documentElement;
       var margin = 8;
-      menu.style.left = Math.max(margin, Math.min(event.clientX, viewport.clientWidth - bounds.width - margin)) + "px";
-      menu.style.top = Math.max(margin, Math.min(event.clientY, viewport.clientHeight - bounds.height - margin)) + "px";
-      items[0].focus({ preventScroll: true });
+      var right = event.clientX + menu.offsetWidth > viewport.clientWidth - margin;
+      var bottom = event.clientY + menu.offsetHeight > viewport.clientHeight - margin;
+      var left = Math.min(event.clientX, viewport.clientWidth - menu.offsetWidth - margin);
+      var top = Math.min(event.clientY, viewport.clientHeight - menu.offsetHeight - margin);
+      menu.style.left = Math.max(margin, left) + "px";
+      menu.style.top = Math.max(margin, top) + "px";
+      menu.style.setProperty("--menu-origin", (bottom ? "bottom " : "top ") + (right ? "right" : "left"));
+      (event.button === 2 ? menu : items[0]).focus({ preventScroll: true });
     });
 
     menu.addEventListener("keydown", function (event) {
       var index = items.indexOf(document.activeElement);
       switch (event.key) {
         case "ArrowDown": index = (index + 1) % items.length; break;
-        case "ArrowUp": index = (index + items.length - 1) % items.length; break;
+        case "ArrowUp": index = index <= 0 ? items.length - 1 : index - 1; break;
         case "Home": index = 0; break;
         case "End": index = items.length - 1; break;
         case "Escape":
@@ -1226,7 +1277,10 @@
       if (event.target.closest('[role="menuitem"]')) close(true);
     });
     document.getElementById("menu-top").addEventListener("click", function () {
-      window.scrollTo({ top: 0 });
+      window.scrollTo({
+        top: 0,
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"
+      });
     });
 
     document.addEventListener("pointerdown", function (event) {
@@ -1251,41 +1305,50 @@
     }
   })();
 
-  // Reveal-on-scroll for headers, cards, steps and footer. The cascade
-  // restarts in every visual row (position within the row, not the whole
-  // grid), so lower rows never wait on upper ones. One-shot per element.
+  // Only enhance off-screen content. The page stays readable without JavaScript.
   (function reveal() {
-    var reduce = false;
-    try { reduce = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
-    var els = document.querySelectorAll(".reveal, .step");
-    if (reduce || !("IntersectionObserver" in window)) {
-      for (var i = 0; i < els.length; i++) els[i].classList.add("in");
-      return;
-    }
-    for (var j = 0; j < els.length; j++) els[j].classList.add("reveal");
-    function rowIndex(el) {
-      var sibs = el.parentNode ? el.parentNode.children : [];
-      var top = el.offsetTop, idx = 0;
-      for (var s = 0; s < sibs.length; s++) {
-        if (sibs[s] === el) break;
-        if (sibs[s].offsetTop === top) idx++;
+    var motion = matchMedia("(prefers-reduced-motion: reduce)");
+    if (motion.matches || !("IntersectionObserver" in window)) return;
+
+    function show(el, animate, delay) {
+      observer.unobserve(el);
+      el.classList.remove("reveal-pending");
+      if (animate && !motion.matches) {
+        el.style.setProperty("--reveal-delay", delay + "ms");
+        el.classList.add("reveal-in");
       }
-      return idx;
     }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (en.isIntersecting) {
-          var k = rowIndex(en.target);
-          en.target.style.transitionDelay = Math.min(k, 3) * 90 + "ms";
-          en.target.classList.add("in");
-          io.unobserve(en.target);
-          (function (el) {
-            setTimeout(function () { el.style.transitionDelay = ""; }, 1300);
-          })(en.target);
-        }
-      });
-    }, { threshold: 0.12 });
-    for (var m = 0; m < els.length; m++) io.observe(els[m]);
+
+    var observer = new IntersectionObserver(function (entries) {
+      var lastTop = null;
+      var stagger = 0;
+      entries.filter(function (entry) { return entry.isIntersecting; })
+        .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; })
+        .forEach(function (entry) {
+          var top = entry.boundingClientRect.top;
+          stagger = lastTop !== null && Math.abs(top - lastTop) < 12 ? stagger + 1 : 0;
+          lastTop = top;
+          show(entry.target, true, Math.min(stagger, 3) * 45);
+        });
+    });
+
+    document.querySelectorAll(".reveal, .step").forEach(function (el) {
+      if (el.getBoundingClientRect().top < window.innerHeight) return;
+      el.classList.add("reveal-pending");
+      observer.observe(el);
+    });
+
+    document.addEventListener("focusin", function (event) {
+      var el = event.target.closest(".reveal-pending, .reveal-in");
+      if (!el) return;
+      if (el.classList.contains("reveal-pending")) show(el, false, 0);
+      el.classList.remove("reveal-in");
+    });
+
+    motion.addEventListener("change", function (event) {
+      if (!event.matches) return;
+      document.querySelectorAll(".reveal-pending").forEach(function (el) { show(el, false, 0); });
+    });
   })();
 })();
 </script>
