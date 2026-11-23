@@ -112,7 +112,45 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::selection { background: var(--select-bg, #f5b35e); color: var(--select-fg, #241a08); }
-  html { scroll-behavior: smooth; }
+  html {
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted) 72%, var(--bg)) var(--bg);
+  }
+  @media (forced-colors: active) {
+    html { scrollbar-width: auto; scrollbar-color: auto; }
+  }
+  .page-menu {
+    position: fixed;
+    z-index: 60;
+    min-width: min(188px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--card);
+    box-shadow: 0 6px 24px #0002;
+    color: var(--fg);
+  }
+  .page-menu [role="menuitem"] {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: 5px;
+    padding: 7px 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .page-menu [role="menuitem"]:is(:hover, :focus-visible) {
+    background: color-mix(in srgb, var(--fg) 8%, var(--card));
+  }
+  .page-menu [role="menuitem"]:focus-visible { outline-offset: -2px; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
@@ -687,6 +725,12 @@
 
 </div>
 
+<div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>
+  <a id="menu-download" role="menuitem" tabindex="-1" data-i18n="menu_dl" href="https://github.com/alnyx-dev/WinThemeAuto/releases/latest/download/WinThemeAuto-x64.exe">Download for Windows</a>
+  <a role="menuitem" tabindex="-1" data-i18n="allrel" href="https://github.com/alnyx-dev/WinThemeAuto/releases">All releases</a>
+  <button id="menu-top" type="button" role="menuitem" tabindex="-1" data-i18n="menu_top">Back to top</button>
+</div>
+
 <script>
 (function () {
   var REPO = "alnyx-dev/WinThemeAuto";
@@ -843,6 +887,9 @@
       s1: "<b>Download</b> the .exe above and run it.",
       s2: "Open <b>Schedule</b>, enable automatic switching and choose fixed times or sunrise and sunset.",
       s3: "Click <b>Apply</b>. Closing the window keeps the app running in the tray.",
+      menu_label: "Page actions",
+      menu_dl: "Download for Windows",
+      menu_top: "Back to top",
       foot: "WinThemeAuto · MIT license", allrel: "All releases"
     },
     ru: {
@@ -894,6 +941,9 @@
       s1: "<b>Скачайте</b> .exe выше и запустите.",
       s2: "Откройте <b>Расписание</b>, включите автопереключение и задайте время или выберите восход и закат.",
       s3: "Нажмите <b>Применить</b>. После закрытия окна приложение продолжит работать в трее.",
+      menu_label: "Действия на странице",
+      menu_dl: "Скачать для Windows",
+      menu_top: "Вернуться наверх",
       foot: "WinThemeAuto · лицензия MIT", allrel: "Все релизы"
     }
   };
@@ -977,6 +1027,7 @@
     var langSeg = document.getElementById("seg-lang");
     if (themeSeg) themeSeg.setAttribute("aria-label", T("theme_aria"));
     if (langSeg) langSeg.setAttribute("aria-label", T("lang_aria"));
+    document.getElementById("page-menu").setAttribute("aria-label", T("menu_label"));
     renderRecNote();
     renderMeta();
     refreshChip();
@@ -1109,6 +1160,82 @@
       renderMeta();
     })
     .catch(function () { /* static fallback links keep working */ });
+
+  (function pageMenu() {
+    var menu = document.getElementById("page-menu");
+    var items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    var previousFocus = null;
+
+    function close(restoreFocus) {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      if (restoreFocus && previousFocus && previousFocus !== document.body) {
+        previousFocus.focus({ preventScroll: true });
+      }
+      previousFocus = null;
+    }
+
+    document.addEventListener("contextmenu", function (event) {
+      if (menu.contains(event.target)) {
+        event.preventDefault();
+        return;
+      }
+      var focused = menu.hidden ? document.activeElement : previousFocus;
+      close(false);
+      if (event.defaultPrevented || (event.shiftKey && event.button === 2) || event.pointerType === "touch" ||
+          event.target.closest("a, button, input, textarea, select, img, video, [contenteditable]") ||
+          !window.getSelection().isCollapsed) {
+        return;
+      }
+
+      event.preventDefault();
+      previousFocus = focused;
+      document.getElementById("menu-download").href = document.getElementById(is32 ? "dl-x86" : "dl-x64").href;
+      menu.style.left = "0px";
+      menu.style.top = "0px";
+      menu.hidden = false;
+      var bounds = menu.getBoundingClientRect();
+      var viewport = document.documentElement;
+      var margin = 8;
+      menu.style.left = Math.max(margin, Math.min(event.clientX, viewport.clientWidth - bounds.width - margin)) + "px";
+      menu.style.top = Math.max(margin, Math.min(event.clientY, viewport.clientHeight - bounds.height - margin)) + "px";
+      items[0].focus({ preventScroll: true });
+    });
+
+    menu.addEventListener("keydown", function (event) {
+      var index = items.indexOf(document.activeElement);
+      switch (event.key) {
+        case "ArrowDown": index = (index + 1) % items.length; break;
+        case "ArrowUp": index = (index + items.length - 1) % items.length; break;
+        case "Home": index = 0; break;
+        case "End": index = items.length - 1; break;
+        case "Escape":
+          event.preventDefault();
+          close(true);
+          return;
+        case "Tab":
+          close(true);
+          return;
+        default: return;
+      }
+      event.preventDefault();
+      items[index].focus({ preventScroll: true });
+    });
+
+    menu.addEventListener("click", function (event) {
+      if (event.target.closest('[role="menuitem"]')) close(true);
+    });
+    document.getElementById("menu-top").addEventListener("click", function () {
+      window.scrollTo({ top: 0 });
+    });
+
+    document.addEventListener("pointerdown", function (event) {
+      if (event.button !== 2 && !menu.contains(event.target)) close(false);
+    });
+    ["scroll", "resize", "blur"].forEach(function (type) {
+      window.addEventListener(type, function () { close(true); }, { passive: true });
+    });
+  })();
 
   // Spotlight follows the cursor inside cards and steps.
   (function spotlight() {
