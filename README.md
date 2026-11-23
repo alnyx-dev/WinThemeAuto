@@ -99,12 +99,12 @@ cargo test
 
 ## 🖥️ Usage
 
-1. Open the app — the header shows the current theme (`Light now` / `Dark now`), the next switch preview, and a quick **Switch** button. Below it, tabs switch between **Auto switch**, **Appearance** and **Settings** (the status line + **Apply** footer stays put).
-2. On the **Auto switch** tab, toggle **Enabled** (closing the window minimizes to tray while enabled).
+1. Open the app — the header shows the current theme (`Light now` / `Dark now`), the next switch preview, and a quick **Switch** button. Navigation opens **Schedule**, **Appearance**, and **Settings**. It sits on the left in wide windows and moves to the top in narrow windows. The status line and **Apply** button stay visible while you scroll.
+2. On the **Schedule** page, turn on **Auto switch** (closing the window minimizes to tray while enabled).
 3. Choose a mode:
    - **By time**: set `Light from` and `Dark from` in `HH:MM` (24-hour) format.
    - **Sunrise and sunset**: enter latitude/longitude, or click **Detect**, then set offsets in minutes.
-4. Still on the tab, pick **Apply to**: **Apps** and/or **System**.
+4. Under **Apply to**, pick **Apps** and/or **System**.
 5. On the **Appearance** tab, pick a full `.theme` for light and dark — or set a **custom wallpaper path** per mode (`…` picks an image file, `Folder` picks a slideshow folder; wins over theme wallpaper). Set the slideshow **interval** and **Shuffle** for folders. Enable **Sync lock screen with theme** and set per-mode lock images (empty = same as desktop). Enable **Sync accent color** and click a swatch (or type hex) per mode.
 6. On the **Settings** tab: **Start with Windows**, version + **Check for updates**, plus a **Logs** button (`%APPDATA%\WinThemeAuto\app.log`).
 7. Click **Apply** (always visible at the bottom). Settings save and apply immediately.
@@ -117,6 +117,9 @@ Closing the window hides it to the tray — use the tray menu or double-click th
 |----------------|---------------------------------------|
 | `Open`         | Show the main window                  |
 | `Switch to…`   | Flip light ↔ dark immediately (label follows the current theme) |
+| `Pause for one hour` | Keep the current appearance for one hour |
+| `Pause until next switch` | Resume automatically at the next scheduled switch |
+| `Resume schedule` | Resume automatic switching immediately |
 | `Exit`         | Quit the app (auto-switch stops)      |
 
 Double-clicking the tray icon also opens the window.
@@ -145,7 +148,7 @@ an already-active slideshow folder to its next image, or configure it fresh.
 
 ### Updates
 
-The **Settings** tab shows the current version (e.g. v0.6.2) and a **Check for updates** button — the result replaces the version text and glows green when you're up to date. If a newer release exists, the app downloads the matching exe (x64/x86 auto-detected), installs it over itself and restarts — settings are kept. See [How does self-update work?](#-faq) for details.
+The **Settings** tab shows the current version and a **Check for updates** button. If a newer release exists, the app shows the available version. Choose **Download and install** to download the matching exe, verify it, install it, and restart the app. Your settings are kept. See [How does self-update work?](#-faq) for details.
 
 ## ⚙️ Settings reference
 
@@ -167,9 +170,9 @@ The **Settings** tab shows the current version (e.g. v0.6.2) and a **Check for u
 | `Light/Dark accent` | Windows accent color per mode, e.g. `0078D4`. Needs **Show accent color on Start and taskbar** enabled for the taskbar to follow. |
 | `Start with Windows` | Writes `HKCU\...\Run\WinThemeAuto = "<exe>" --tray`. Uncheck to remove. |
 | `Language` | `EN` / `RU` interface switch in Settings — applies instantly, no restart. |
-| `Check for updates` | Compares the app version with the latest GitHub Release; if newer, downloads and self-installs it, then restarts. |
+| `Check for updates` | Shows the latest available release. Choose **Download and install** to update and restart. |
 
-The header subtitle previews the next switch (`Dark now • Next: dark at 19:00 (in 7 h)`); errors appear in red in the footer status line (bad time format, missing coordinates, save failures).
+The header subtitle previews the next switch (`Dark now • Next: dark at 19:00 (in 7 h)`); validation and save errors appear in the footer status line (bad time format, missing coordinates, save failures).
 
 ## 📁 Configuration file
 
@@ -206,6 +209,7 @@ Example:
   "light_accent": "0078D4",
   "dark_accent": "4CC2FF",
   "language": "en",
+  "paused_until": null,
   "manual_hold": null,
   "manual_hold_until": null
 }
@@ -217,7 +221,7 @@ Notes:
 - Unknown or malformed fields are ignored; invalid times fall back to defaults (`07:00` / `19:00`).
 - Out-of-range values are clamped (`lat`, `lon`, offsets, slideshow interval `1–1440`); an expired `manual_hold_until` clears the hold.
 - `slideshow_interval_min` defaults to `30`, `slideshow_shuffle` to `false`.
-- `manual_hold` / `manual_hold_until` are managed by Switch/CLI — no need to hand-edit them.
+- The Schedule page and tray manage `paused_until`. Manual switching and CLI commands manage `manual_hold` and `manual_hold_until`.
 - Saves are atomic (`config.json.tmp` → rename). A fully unparseable file is backed up to `config.json.corrupt.bak` and defaults are used.
 - Diagnostics go to `%APPDATA%\WinThemeAuto\app.log` (rotated at 256 KB, one backup kept; **Logs** button in Settings opens it).
 
@@ -228,11 +232,11 @@ Notes:
 - **Previews (bounded RAM):** the Appearance tab shows shell thumbnails (`IShellItemImageFactory`, 320×180) instead of full decodes — a 4K photo costs kilobytes, not tens of megabytes. Files under 8 MB fall back to direct load when no thumbnail provider exists.
 - **Lock screen (optional):** per-mode lock image via WinRT (`TrySetLockScreenImageAsync`, `LockScreen` fallback, STA-safe) — no admin, per-user. Custom lock path wins; empty falls back to the desktop wallpaper/theme image.
 - **Accent sync (optional):** per-mode accent applied through the same `SetUserColorPreference` path Settings uses (proper `AccentPalette` included; direct registry writes as fallback), then broadcast like a theme switch. Honors your `ColorPrevalence` setting — it won't force accent onto the taskbar if you turned that off.
-- **Live refresh:** after a change, broadcasts `WM_SETTINGCHANGE (ImmersiveColorSet)` + `WM_THEMECHANGED` (repeated once after 200 ms for slow apps) and invalidates `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` so the taskbar and apps update without logoff.
+- **Live refresh:** posts `WM_THEMECHANGED` and refreshes the taskbars immediately. A background worker sends `WM_SETTINGCHANGE (ImmersiveColorSet)` and retries after 200 ms of quiet.
 - **Scheduler:** at each scheduled switch (plus a 60 s safety net for clock changes and sleep/resume) the app computes the *desired* theme for `now` and applies it only if the registry doesn't already match (avoids redundant writes).
 - **Fixed mode:** a circular time-interval check — handles both same-day (`07:00→19:00`) and overnight (`20:00→06:00`) ranges.
 - **Sun mode:** offline solar calculation (mean anomaly → ecliptic longitude → transit → hour angle, `-0.833°` zenith correction) per date + longitude/latitude. Returns `Normal { rise, set }`, `PolarDay`, or `PolarNight`.
-- **UI:** [Slint](https://slint.dev/) (Fluent style), single compact window with a stable size — info lines occupy reserved space so the window never jumps. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
+- **UI:** [Slint](https://slint.dev/) (Fluent style), resizable window with a status header, sidebar navigation, scrollable settings, and an Apply button that stays visible. The app's own title bar is forced light via `DwmSetWindowAttribute` for consistent readability.
 - **Self-update:** compares `CARGO_PKG_VERSION` with the latest GitHub Release tag, downloads the arch-matching asset and hands over to a hidden updater script that waits for exit, swaps the exe and relaunches with the same args.
 - **Autostart:** standard `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry.
 - **Single instance:** a named mutex guards the process; a second launch forwards focus to the running window and exits.
@@ -299,7 +303,7 @@ Key dependencies: `slint`, `winreg`, `tray-icon`, `chrono` (+`chrono-tz` for dev
 - Coordinates and preferences stay local in your config file.
 - Network is used only when **you** ask for it:
   - **Detect via IP** → one GET to `https://ipwho.is/` (falls back to `https://ipapi.co/json/`)
-  - **Check for updates** → GitHub Releases API + exe download from `github.com`
+  - **Check for updates** → GitHub Releases API and checksum metadata. **Download and install** → exe download from `github.com`
 - Sun-time computation itself is fully offline.
 
 ## ❓ FAQ
@@ -335,7 +339,7 @@ Native code can't be universal: `x64` is for 64-bit Windows (most PCs), `x86` fo
 <details>
 <summary><b>How does self-update work?</b></summary>
 
-The **Check for updates** button compares your version with the latest GitHub Release, downloads the matching exe, then a hidden updater script waits for the app to exit, swaps the file and restarts it (keeping your args like `--tray`). Settings in `%APPDATA%` are untouched.
+**Check for updates** compares your version with the latest GitHub Release. After you choose **Download and install**, the app downloads and verifies the matching exe. A hidden updater script then waits for the app to exit, swaps the file, and restarts it with the same arguments, including `--tray` if used. Settings in `%APPDATA%` are kept.
 
 </details>
 
@@ -392,6 +396,14 @@ Around 10 MB idle. Wallpaper previews are capped shell thumbnails (320×180), so
 | Accent not visible on taskbar | Enable **Show accent color on Start and taskbar** in Windows Settings → Personalization → Colors. |
 
 ## 📜 Changelog
+
+### v0.7.0
+
+- Resizable settings window with adaptive navigation, a day/night status header, a fixed Apply button, and short button press animations.
+- Pause automatic switching from the Schedule page or the tray for one hour or until the next scheduled switch. Resume the schedule at any time.
+- CLI theme commands use the running tray instance so manual choices are held until the next scheduled switch.
+- The window and tray update as soon as the system theme changes. Desktop wallpaper, lock screen, and accent updates run in the background.
+- Update checks show the available version and wait for you to choose **Download and install**.
 
 ### v0.6.2
 - ⏭️ Slideshow advance: each theme switch moves an already-active slideshow to the next image (`AdvanceSlideshow`); freshly configured folders start at the first image

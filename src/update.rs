@@ -46,6 +46,7 @@ struct Asset {
     digest: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct UpdateInfo {
     pub latest: String,
     pub download_url: String,

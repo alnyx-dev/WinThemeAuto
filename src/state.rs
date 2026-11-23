@@ -1,4 +1,4 @@
-use crate::{config::Config, log, slideshow::AppliedWallpaper, theme::Theme, themes};
+use crate::{appearance, config::Config, log, theme::Theme, themes};
 use chrono::{DateTime, Local};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -7,13 +7,24 @@ pub struct State {
     pub cfg: Config,
     pub themes: Vec<themes::ThemeEntry>,
     pub last_scheduled: Option<Theme>,
+    pub available_update: Option<crate::update::UpdateInfo>,
     pub update_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub last_titlebar_sys: Option<Theme>,
-    pub last_wallpaper: Option<AppliedWallpaper>,
-    pub last_lockscreen: Option<PathBuf>,
-    pub last_accent: Option<u32>,
+    pub appearance: appearance::Worker,
     pub last_tray_tooltip: Option<String>,
     pub last_tray_dark: Option<bool>,
+}
+
+impl State {
+    pub fn apply_appearance(
+        &mut self,
+        ui: &crate::MainWindow,
+        target: Theme,
+        trigger: appearance::Trigger,
+    ) {
+        self.appearance
+            .submit(ui, &self.cfg, &self.themes, target, trigger);
+    }
 }
 
 pub type Shared = Arc<std::sync::Mutex<State>>;

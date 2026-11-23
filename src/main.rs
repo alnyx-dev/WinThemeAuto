@@ -2,8 +2,10 @@
 
 mod accent;
 mod actions;
+mod appearance;
 mod autostart;
 mod cli;
+mod commands;
 mod config;
 mod geo;
 mod i18n;
@@ -21,7 +23,9 @@ mod tray;
 mod ui;
 mod update;
 
-use actions::{apply_settings, arm_tick, check_updates, tick, toggle};
+use actions::{
+    apply_settings, arm_tick, check_updates, install_update, set_pause, switch_theme, tick,
+};
 use chrono::Local;
 use config::Config;
 use i18n::Lang;
@@ -68,6 +72,32 @@ fn attach_console() {
 
 fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
     attach_console();
+    let _guard = {
+        let mut guard = None;
+        for attempt in 0..40 {
+            if let Some(acquired) = single_instance::Guard::acquire()? {
+                guard = Some(acquired);
+                break;
+            }
+            if let Some(applied) = commands::send(target)? {
+                println!(
+                    "{}",
+                    if applied == Theme::Dark {
+                        "dark"
+                    } else {
+                        "light"
+                    }
+                );
+                return Ok(());
+            }
+            if attempt < 39 {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        guard.ok_or_else(|| {
+            anyhow::anyhow!("The running instance is unavailable for theme commands")
+        })?
+    };
     let mut cfg = Config::load();
     if !cfg.change_apps && !cfg.change_system {
         eprintln!("Nothing to switch: enable Apps or System in the app first");
@@ -85,28 +115,10 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
         if want == Theme::Dark { "dark" } else { "light" }
     ));
     let themes = themes::enumerate();
-    if let Some(path) = resolve_wallpaper_path(&cfg, &themes, want) {
-        if path.exists() {
-            if path.is_dir() {
-                // A CLI call is always an explicit switch: advance the
-                // already-active slideshow, or configure it fresh.
-                let already_active = slideshow::active_source_dir()
-                    .map(|d| slideshow::same_dir(&d, &path))
-                    .unwrap_or(false);
-                if already_active {
-                    if let Err(e) = slideshow::advance() {
-                        eprintln!("Wallpaper: {e}");
-                    }
-                } else {
-                    let interval = slideshow::clamp_interval(cfg.slideshow_interval_min);
-                    if let Err(e) = slideshow::set_slideshow(&path, interval, cfg.slideshow_shuffle)
-                    {
-                        eprintln!("Wallpaper: {e}");
-                    }
-                }
-            } else if let Err(e) = theme::set_wallpaper(&path) {
-                eprintln!("Wallpaper: {e}");
-            }
+    if let Some(path) = resolve_wallpaper_path(&cfg, &themes, want).filter(|path| path.exists()) {
+        let interval = slideshow::clamp_interval(cfg.slideshow_interval_min);
+        if let Err(e) = slideshow::apply_explicit(&path, interval, cfg.slideshow_shuffle) {
+            eprintln!("Wallpaper: {e}");
         }
     }
     if let Some(resolved) = resolve_lock_wallpaper_path(&cfg, &themes, want) {
@@ -139,32 +151,18 @@ fn run_cli(target: Option<Theme>) -> anyhow::Result<()> {
         }
     }
     println!("{}", if want == Theme::Dark { "dark" } else { "light" });
-    if cfg.auto_enabled {
-        let now = Local::now();
-        if let Some(scheduled) = schedule::desired_theme(&cfg, now) {
-            if scheduled != want {
-                let until = schedule::next_switch(&cfg, now)
-                    .map(|s| s.at)
-                    .unwrap_or_else(|| now + chrono::Duration::days(1));
-                cfg.manual_hold = Some(want);
-                cfg.manual_hold_until = Some(until);
-                if let Err(e) = cfg.save() {
-                    eprintln!("Warning: cannot persist manual hold: {e}");
-                }
-                eprintln!(
-                    "Note: auto-switch is on and wants {} — holding {} until the next switch.",
-                    if scheduled == Theme::Dark {
-                        "dark"
-                    } else {
-                        "light"
-                    },
-                    if want == Theme::Dark { "dark" } else { "light" }
-                );
-            } else if cfg.manual_hold.is_some() {
-                cfg.manual_hold = None;
-                cfg.manual_hold_until = None;
-                let _ = cfg.save();
-            }
+    let until = schedule::manual_hold_until(&cfg, want, Local::now());
+    if until.is_some() || cfg.manual_hold.is_some() {
+        cfg.manual_hold = until.map(|_| want);
+        cfg.manual_hold_until = until;
+        if let Err(e) = cfg.save() {
+            eprintln!("Warning: cannot persist manual hold: {e}");
+        }
+        if let Some(until) = until {
+            eprintln!(
+                "Holding the manual theme until {}.",
+                until.format("%d.%m %H:%M")
+            );
         }
     }
     Ok(())
@@ -236,11 +234,10 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         cfg: Config::load(),
         themes: themes::enumerate(),
         last_scheduled: None,
+        available_update: None,
         update_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         last_titlebar_sys: None,
-        last_wallpaper: None,
-        last_lockscreen: None,
-        last_accent: None,
+        appearance: appearance::Worker::default(),
         last_tray_tooltip: None,
         last_tray_dark: None,
     }));
@@ -334,7 +331,7 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         );
         ui.on_toggle_theme(move || {
             if let Some(ui) = w.upgrade() {
-                toggle(&ui, &s, &t, &timer);
+                switch_theme(&ui, &s, &t, &timer, None);
             }
         });
     }
@@ -493,8 +490,15 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
         ui.on_check_updates(move || {
             if let Some(ui) = w.upgrade() {
                 let lang = Lang::from_code(&s.lock().unwrap().cfg.language);
-                let cancel = s.lock().unwrap().update_cancel.clone();
-                check_updates(&ui, lang, cancel);
+                check_updates(&ui, lang, &s);
+            }
+        });
+    }
+    {
+        let (w, s) = (ui.as_weak(), state.clone());
+        ui.on_install_update(move || {
+            if let Some(ui) = w.upgrade() {
+                install_update(&ui, &s);
             }
         });
     }
@@ -514,6 +518,29 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
                 refresh_themes(&ui, &s);
             }
         });
+    }
+
+    for action in [
+        tray::PauseAction::Hour,
+        tray::PauseAction::NextSwitch,
+        tray::PauseAction::Resume,
+    ] {
+        let (w, s, t, timer) = (
+            ui.as_weak(),
+            state.clone(),
+            tray.clone(),
+            tick_timer.clone(),
+        );
+        let run = move || {
+            if let Some(ui) = w.upgrade() {
+                set_pause(&ui, &s, &t, &timer, action);
+            }
+        };
+        match action {
+            tray::PauseAction::Hour => ui.on_pause_hour(run),
+            tray::PauseAction::NextSwitch => ui.on_pause_next(run),
+            tray::PauseAction::Resume => ui.on_resume_schedule(run),
+        }
     }
 
     arm_tick(&tick_timer, &ui.as_weak(), &state, &tray);
@@ -538,7 +565,9 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
                     if ev.id == open_id {
                         show_window(&ui, &s);
                     } else if ev.id == toggle_id {
-                        toggle(&ui, &s, &t, &timer);
+                        switch_theme(&ui, &s, &t, &timer, None);
+                    } else if let Some(action) = t.pause_action(&ev.id) {
+                        set_pause(&ui, &s, &t, &timer, action);
                     } else if ev.id == quit_id {
                         let _ = slint::quit_event_loop();
                     }
@@ -553,6 +582,20 @@ fn run_loop(start_hidden: bool) -> anyhow::Result<()> {
             }
         });
     }
+
+    let _commands = {
+        let (w, s, t, timer) = (
+            ui.as_weak(),
+            state.clone(),
+            tray.clone(),
+            tick_timer.clone(),
+        );
+        commands::Receiver::create(move |target| {
+            // A Windows API invoked by another callback may pump sent messages.
+            drop(s.try_lock().ok()?);
+            switch_theme(&w.upgrade()?, &s, &t, &timer, target)
+        })?
+    };
 
     if !start_hidden {
         show_window(&ui, &state);

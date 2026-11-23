@@ -1,12 +1,11 @@
 use crate::{
-    accent, autostart,
+    accent,
+    appearance::Trigger,
+    autostart,
     config::{Config, Mode},
     i18n::{self, Lang},
-    lockscreen, log, schedule, slideshow,
-    state::{
-        clear_hold, resolve_lock_wallpaper_path, resolve_wallpaper_path, set_hold, theme_path,
-        Shared, State,
-    },
+    log, schedule, slideshow,
+    state::{clear_hold, set_hold, theme_path, Shared},
     theme::{self, Theme},
     tray,
     ui::{
@@ -17,13 +16,17 @@ use crate::{
 use chrono::{Local, NaiveTime};
 use slint::{ComponentHandle, Timer, TimerMode};
 use std::path::PathBuf;
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::{rc::Rc, time::Duration};
 
 pub(crate) fn tick_delay(state: &Shared) -> Duration {
     let st = state.lock().unwrap();
+    let now = Local::now();
+    if let Some(until) = schedule::paused_until(&st.cfg, now) {
+        return Duration::from_millis((until - now).num_milliseconds().clamp(500, 60_000) as u64);
+    }
     if st.cfg.auto_enabled && (st.cfg.change_apps || st.cfg.change_system) {
-        if let Some(sw) = schedule::next_switch(&st.cfg, Local::now()) {
-            let ms = (sw.at - Local::now()).num_milliseconds().max(0) as u64;
+        if let Some(sw) = schedule::next_switch(&st.cfg, now) {
+            let ms = (sw.at - now).num_milliseconds().max(0) as u64;
             // Wake exactly at the switch, with a 60 s safety net for clock
             // changes, sleep/resume and external theme drift.
             return Duration::from_millis(ms.clamp(500, 60_000));
@@ -50,13 +53,17 @@ pub(crate) fn arm_tick(
 }
 
 pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
-    let (apps_theme, sys_theme) = theme::current_pair();
+    tick_inner(ui, state, tray, None);
+}
+
+fn tick_inner(ui: &MainWindow, state: &Shared, tray: &tray::Tray, manual: Option<Theme>) {
+    let (mut apps_theme, mut sys_theme) = theme::current_pair();
     {
         let mut st = state.lock().unwrap();
         let now = Local::now();
         let lang = Lang::from_code(&st.cfg.language);
 
-        if st.cfg.auto_enabled {
+        if st.cfg.auto_enabled && schedule::paused_until(&st.cfg, now).is_none() {
             if let Some(want) = schedule::desired_theme(&st.cfg, now) {
                 // A genuine theme change since the previous tick: only then
                 // may an already-active slideshow advance (safety-net ticks
@@ -70,7 +77,9 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                     let need = (st.cfg.change_apps && apps_theme != want)
                         || (st.cfg.change_system && sys_theme != want);
                     if need {
-                        match theme::apply(want, st.cfg.change_apps, st.cfg.change_system) {
+                        let result = theme::apply(want, st.cfg.change_apps, st.cfg.change_system);
+                        (apps_theme, sys_theme) = theme::current_pair();
+                        match result {
                             Ok(()) => {
                                 st.last_scheduled = Some(want);
                                 log::info(format!(
@@ -88,15 +97,19 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
                     } else {
                         st.last_scheduled = Some(want);
                     }
-                    apply_wallpaper(ui, &mut st, want, switched);
-                    apply_lockscreen(ui, &mut st, want);
-                    apply_accent(ui, &mut st, want);
+                    if manual.is_none() {
+                        st.apply_appearance(ui, want, Trigger::Scheduled { switched });
+                    }
                 }
             } else {
                 clear_hold(&mut st);
             }
-        } else {
+        } else if !st.cfg.auto_enabled {
             clear_hold(&mut st);
+        }
+
+        if let Some(target) = manual {
+            st.apply_appearance(ui, target, Trigger::Manual);
         }
 
         let info = if st.cfg.mode == Mode::Sun {
@@ -104,6 +117,13 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
         } else {
             String::new()
         };
+        let schedule_enabled = st.cfg.auto_enabled && (st.cfg.change_apps || st.cfg.change_system);
+        let has_next_switch = schedule::next_switch(&st.cfg, now).is_some();
+        let schedule_paused = schedule::paused_until(&st.cfg, now).is_some();
+        tray.update_pause(lang, schedule_enabled, has_next_switch, schedule_paused);
+        ui.set_schedule_enabled(schedule_enabled);
+        ui.set_has_next_switch(has_next_switch);
+        ui.set_schedule_paused(schedule_paused);
         let next = schedule::next_switch_info(&st.cfg, now);
         ui.set_sun_info(info.into());
         ui.set_next_switch(next.clone().into());
@@ -147,216 +167,161 @@ pub(crate) fn tick(ui: &MainWindow, state: &Shared, tray: &tray::Tray) {
     }
 }
 
-pub(crate) fn apply_accent(ui: &MainWindow, st: &mut State, want: Theme) {
-    if !st.cfg.accent_enabled {
-        return;
-    }
-    let hex = if want == Theme::Light {
-        st.cfg.light_accent.clone()
-    } else {
-        st.cfg.dark_accent.clone()
-    };
-    let Some(color) = accent::parse_hex(&hex) else {
-        return;
-    };
-    if st.last_accent == Some(color) {
-        return;
-    }
-    match accent::apply(color) {
-        Ok(()) => st.last_accent = Some(color),
-        Err(e) => {
-            log::warn(format!("accent failed: {e:#}"));
-            let lang = Lang::from_code(&st.cfg.language);
-            ui.set_status(i18n::msg(lang, "accent", &e.to_string()).into());
-        }
-    }
-}
-
-pub(crate) fn apply_wallpaper(ui: &MainWindow, st: &mut State, want: Theme, switched: bool) {
-    let Some(path) = resolve_wallpaper_path(&st.cfg, &st.themes, want) else {
-        return;
-    };
-    if !path.exists() {
-        return;
-    }
-    let interval = slideshow::clamp_interval(st.cfg.slideshow_interval_min);
-    let shuffle = st.cfg.slideshow_shuffle;
-    let key = slideshow::applied_key(&path, interval, shuffle);
-    let key_changed = st.last_wallpaper.as_ref() != Some(&key);
-    let fail = |ui: &MainWindow, st: &State, e: &anyhow::Error| {
-        log::warn(format!("wallpaper failed: {e:#}"));
-        let lang = Lang::from_code(&st.cfg.language);
-        ui.set_status(i18n::msg(lang, "wallpaper", &e.to_string()).into());
-    };
-    match slideshow::plan_apply(path.is_dir(), key_changed, switched) {
-        slideshow::ApplyPlan::Skip => {}
-        slideshow::ApplyPlan::SetSingle => match theme::set_wallpaper(&path) {
-            Ok(()) => st.last_wallpaper = Some(key),
-            Err(e) => fail(ui, st, &e),
-        },
-        slideshow::ApplyPlan::ConfigureShow => {
-            match slideshow::set_slideshow(&path, interval, shuffle) {
-                Ok(()) => st.last_wallpaper = Some(key),
-                Err(e) => fail(ui, st, &e),
-            }
-        }
-        slideshow::ApplyPlan::AdvanceShow => {
-            // Folder already active: move to the next image. The key
-            // already matches, so nothing else to record.
-            if let Err(e) = slideshow::advance() {
-                fail(ui, st, &e);
-            }
-        }
-    }
-}
-
-pub(crate) fn apply_lockscreen(ui: &MainWindow, st: &mut State, want: Theme) {
-    let Some(resolved) = resolve_lock_wallpaper_path(&st.cfg, &st.themes, want) else {
-        return;
-    };
-    // A slideshow folder as desktop fallback resolves to its first image:
-    // the lock screen API only accepts single files.
-    let path = if resolved.is_dir() {
-        match slideshow::first_image(&resolved) {
-            Some(first) => first,
-            None => return,
-        }
-    } else {
-        resolved
-    };
-    if st.last_lockscreen.as_ref() == Some(&path) {
-        return;
-    }
-    if !path.exists() {
-        return;
-    }
-    match lockscreen::set_image(&path) {
-        Ok(()) => {
-            st.last_lockscreen = Some(path.clone());
-            log::info(format!("lock screen: applied {}", path.display()));
-        }
-        Err(e) => {
-            log::warn(format!("lock screen failed: {e:#}"));
-            let lang = Lang::from_code(&st.cfg.language);
-            ui.set_status(i18n::msg(lang, "lockscreen", &format!("{e:#}")).into());
-        }
-    }
-}
-
-pub(crate) fn toggle(ui: &MainWindow, state: &Shared, tray: &Rc<tray::Tray>, timer: &Rc<Timer>) {
-    let (apps, system, lang, auto_enabled) = {
+pub(crate) fn switch_theme(
+    ui: &MainWindow,
+    state: &Shared,
+    tray: &Rc<tray::Tray>,
+    timer: &Rc<Timer>,
+    target: Option<Theme>,
+) -> Option<Theme> {
+    let (apps, system, lang) = {
         let st = state.lock().unwrap();
         (
             st.cfg.change_apps,
             st.cfg.change_system,
             Lang::from_code(&st.cfg.language),
-            st.cfg.auto_enabled,
         )
     };
     if !apps && !system {
         ui.set_status(i18n::msg(lang, "nothing_toggle", "").into());
-        return;
+        return None;
     }
-    let new = theme::effective_current(apps, system).toggled();
-    match theme::apply(new, apps, system) {
-        Ok(()) => {
-            log::info(format!(
-                "manual switch: applied {}",
-                if new == Theme::Dark { "dark" } else { "light" }
-            ));
-            ui.set_is_dark(new == Theme::Dark);
-            apply_wallpaper(ui, &mut state.lock().unwrap(), new, true);
-            apply_lockscreen(ui, &mut state.lock().unwrap(), new);
-            apply_accent(ui, &mut state.lock().unwrap(), new);
-            if auto_enabled {
-                let now = Local::now();
-                let (want, until) = {
-                    let st = state.lock().unwrap();
-                    (
-                        schedule::desired_theme(&st.cfg, now),
-                        schedule::next_switch(&st.cfg, now).map(|s| s.at),
-                    )
+    let target = target.unwrap_or_else(|| theme::effective_current(apps, system).toggled());
+    if let Err(e) = theme::apply(target, apps, system) {
+        log::error(format!("manual switch failed: {e:#}"));
+        ui.set_status(i18n::msg(lang, "error", &e.to_string()).into());
+        return None;
+    }
+
+    let now = Local::now();
+    let until = schedule::manual_hold_until(&state.lock().unwrap().cfg, target, now);
+    if let Some(until) = until {
+        set_hold(state, target, until);
+        let next = schedule::next_switch_info(&state.lock().unwrap().cfg, now);
+        ui.set_status(if next.is_empty() {
+            i18n::msg(lang, "held_plain", "").into()
+        } else {
+            i18n::msg(lang, "held", &next).into()
+        });
+    } else {
+        clear_hold(&mut state.lock().unwrap());
+        ui.set_status("".into());
+    }
+    log::info(format!("manual switch: applied {target:?}"));
+    tick_inner(ui, state, tray, Some(target));
+    arm_tick(timer, &ui.as_weak(), state, tray);
+    Some(target)
+}
+
+pub(crate) fn set_pause(
+    ui: &MainWindow,
+    state: &Shared,
+    tray: &Rc<tray::Tray>,
+    timer: &Rc<Timer>,
+    action: tray::PauseAction,
+) {
+    let now = Local::now();
+    {
+        let mut st = state.lock().unwrap();
+        let mut cfg = st.cfg.clone();
+        cfg.paused_until = match action {
+            tray::PauseAction::Hour => Some(now + chrono::Duration::hours(1)),
+            tray::PauseAction::NextSwitch => {
+                let Some(next) = schedule::next_switch(&cfg, now) else {
+                    return;
                 };
-                match want {
-                    Some(w) if w != new => {
-                        let until = until.unwrap_or_else(|| now + chrono::Duration::days(1));
-                        set_hold(state, new, until);
-                        let next = schedule::next_switch_info(&state.lock().unwrap().cfg, now);
-                        let text = if next.is_empty() {
-                            i18n::msg(lang, "held_plain", "")
-                        } else {
-                            i18n::msg(lang, "held", &next)
-                        };
-                        ui.set_status(text.into());
-                    }
-                    _ => {
-                        clear_hold(&mut state.lock().unwrap());
-                        ui.set_status("".into());
-                    }
-                }
-            } else {
-                clear_hold(&mut state.lock().unwrap());
-                ui.set_status("".into());
+                Some(next.at)
             }
-            tick(ui, state, tray);
+            tray::PauseAction::Resume => None,
+        };
+        cfg.manual_hold = None;
+        cfg.manual_hold_until = None;
+        if let Err(e) = cfg.save() {
+            let lang = Lang::from_code(&cfg.language);
+            log::error(format!("pause save failed: {e:#}"));
+            ui.set_status(i18n::msg(lang, "save_fail", &e.to_string()).into());
+            return;
         }
-        Err(e) => {
-            log::error(format!("manual switch failed: {e:#}"));
-            ui.set_status(i18n::msg(lang, "error", &e.to_string()).into());
-            ui.set_is_dark(theme::effective_current(apps, system) == Theme::Dark);
-        }
+        st.cfg = cfg;
     }
+    ui.set_status("".into());
+    tick(ui, state, tray);
     arm_tick(timer, &ui.as_weak(), state, tray);
 }
 
-pub(crate) fn check_updates(
-    ui: &MainWindow,
-    lang: Lang,
-    cancel: Arc<std::sync::atomic::AtomicBool>,
-) {
-    use std::sync::atomic::Ordering;
+pub(crate) fn check_updates(ui: &MainWindow, lang: Lang, state: &Shared) {
     if ui.get_checking_update() {
         return;
     }
-    cancel.store(false, Ordering::SeqCst);
+    state.lock().unwrap().available_update = None;
+    ui.set_available_version("".into());
     ui.set_checking_update(true);
     ui.set_update_info(i18n::msg(lang, "checking_updates", "").into());
     ui.set_update_ok(false);
 
     let weak = ui.as_weak();
+    let state = state.clone();
     std::thread::spawn(move || {
-        let info = update::check();
-        let set = |text: &str, done: bool, ok: bool| {
+        let result = update::check();
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            let mut st = state.lock().unwrap();
+            let lang = Lang::from_code(&st.cfg.language);
+            match result {
+                Ok(info) if info.is_newer => {
+                    log::info(format!("update check: found {}", info.latest));
+                    ui.set_available_version(info.latest.trim_start_matches('v').into());
+                    ui.set_update_info("".into());
+                    st.available_update = Some(info);
+                }
+                Ok(info) => {
+                    log::info(format!("update check: already latest ({})", info.latest));
+                    ui.set_update_info(i18n::msg(lang, "latest", &info.latest).into());
+                    ui.set_update_ok(true);
+                }
+                Err(e) => {
+                    log::warn(format!("update check failed: {e:#}"));
+                    ui.set_update_info(i18n::msg(lang, "check_fail", &e.to_string()).into());
+                }
+            }
+            ui.set_checking_update(false);
+        });
+    });
+}
+
+pub(crate) fn install_update(ui: &MainWindow, state: &Shared) {
+    use std::sync::atomic::Ordering;
+    if ui.get_checking_update() {
+        return;
+    }
+    let (Some(info), lang, cancel) = ({
+        let st = state.lock().unwrap();
+        (
+            st.available_update.clone(),
+            Lang::from_code(&st.cfg.language),
+            st.update_cancel.clone(),
+        )
+    }) else {
+        return;
+    };
+    cancel.store(false, Ordering::SeqCst);
+    ui.set_checking_update(true);
+    ui.set_downloading_update(true);
+    ui.set_update_ok(false);
+
+    let weak = ui.as_weak();
+    std::thread::spawn(move || {
+        let set = |text: &str, done: bool, downloading: bool| {
             let text = text.to_string();
             let _ = weak.upgrade_in_event_loop(move |ui| {
                 ui.set_update_info(text.into());
-                ui.set_update_ok(ok);
+                ui.set_downloading_update(downloading);
                 if done {
                     ui.set_checking_update(false);
                 }
             });
         };
 
-        let info = match info {
-            Ok(i) => i,
-            Err(e) => {
-                log::warn(format!("update check failed: {e:#}"));
-                set(&i18n::msg(lang, "check_fail", &e.to_string()), true, false);
-                return;
-            }
-        };
-        if !info.is_newer {
-            log::info(format!("update check: already latest ({})", info.latest));
-            set(&i18n::msg(lang, "latest", &info.latest), true, true);
-            return;
-        }
-        log::info(format!("update check: found {}", info.latest));
-
-        set(
-            &i18n::dl_progress(lang, &info.latest, 0, None),
-            false,
-            false,
-        );
+        set(&i18n::dl_progress(lang, &info.latest, 0, None), false, true);
         let prog_weak = weak.clone();
         let prog_state = std::sync::Mutex::new((std::time::Instant::now(), 0u64));
         let latest = info.latest.clone();
@@ -396,6 +361,12 @@ pub(crate) fn check_updates(
                 return;
             }
         };
+
+        if cancel.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_file(&new_exe);
+            set(&i18n::msg(lang, "cancelled", ""), true, false);
+            return;
+        }
 
         set(&i18n::msg(lang, "installing", &info.latest), false, false);
         match update::self_install(&new_exe) {
@@ -573,6 +544,14 @@ pub(crate) fn apply_settings(
         return;
     }
 
+    let (close_hint_acked, paused_until) = {
+        let st = state.lock().unwrap();
+        let keep_pause = ui.get_auto_enabled() && (ui.get_change_apps() || ui.get_change_system());
+        let pause = keep_pause
+            .then(|| schedule::paused_until(&st.cfg, Local::now()))
+            .flatten();
+        (st.cfg.close_hint_acked, pause)
+    };
     let new_cfg = Config {
         auto_enabled: ui.get_auto_enabled(),
         mode,
@@ -597,7 +576,8 @@ pub(crate) fn apply_settings(
         light_accent,
         dark_accent,
         language: lang.code().to_string(),
-        close_hint_acked: state.lock().unwrap().cfg.close_hint_acked,
+        close_hint_acked,
+        paused_until,
         manual_hold: None,
         manual_hold_until: None,
     };
@@ -610,9 +590,7 @@ pub(crate) fn apply_settings(
         let mut st = state.lock().unwrap();
         st.cfg = new_cfg;
         st.last_scheduled = None;
-        st.last_wallpaper = None;
-        st.last_lockscreen = None;
-        st.last_accent = None;
+        st.appearance.invalidate();
     }
 
     if let Err(e) = autostart::set(ui.get_autostart()) {
@@ -628,9 +606,10 @@ pub(crate) fn apply_settings(
             let st = state.lock().unwrap();
             theme::effective_current(st.cfg.change_apps, st.cfg.change_system)
         };
-        apply_wallpaper(ui, &mut state.lock().unwrap(), cur, false);
-        apply_lockscreen(ui, &mut state.lock().unwrap(), cur);
-        apply_accent(ui, &mut state.lock().unwrap(), cur);
+        state
+            .lock()
+            .unwrap()
+            .apply_appearance(ui, cur, Trigger::Scheduled { switched: false });
     }
 
     update_lang_ui(ui, state, lang);
@@ -651,17 +630,18 @@ pub(crate) fn apply_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::State;
+    use std::sync::Arc;
 
     fn state_with(cfg: Config) -> Shared {
         Arc::new(std::sync::Mutex::new(State {
             cfg,
             themes: Vec::new(),
             last_scheduled: None,
+            available_update: None,
             update_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             last_titlebar_sys: None,
-            last_wallpaper: None,
-            last_lockscreen: None,
-            last_accent: None,
+            appearance: crate::appearance::Worker::default(),
             last_tray_tooltip: None,
             last_tray_dark: None,
         }))

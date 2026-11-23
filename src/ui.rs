@@ -124,6 +124,7 @@ pub(crate) fn apply_lang(ui: &MainWindow, lang: Lang) {
     ui.set_t_rescan(s.rescan.into());
     ui.set_t_autostart(s.autostart.into());
     ui.set_t_check_updates(s.check_updates.into());
+    ui.set_t_install_update(s.install_update.into());
     ui.set_t_checking(s.checking.into());
     ui.set_t_apply(s.apply.into());
     ui.set_t_to_light(s.to_light.into());
@@ -133,7 +134,13 @@ pub(crate) fn apply_lang(ui: &MainWindow, lang: Lang) {
     ui.set_t_language(s.language.into());
     ui.set_t_releases(s.releases.into());
     ui.set_t_logs(s.logs.into());
-    ui.set_t_onboard(s.onboard.into());
+    ui.set_t_schedule_off(s.schedule_off.into());
+    ui.set_t_pause_hour(s.pause_hour.into());
+    ui.set_t_pause_next(s.pause_next.into());
+    ui.set_t_resume_schedule(s.resume_schedule.into());
+    ui.set_t_desktop(s.desktop.into());
+    ui.set_t_updates(s.updates.into());
+    ui.set_t_unsaved(s.unsaved.into());
     ui.set_t_cancel(s.cancel.into());
     ui.set_t_close_title(s.close_title.into());
     ui.set_t_close_body(s.close_body.into());

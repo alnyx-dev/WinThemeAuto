@@ -104,6 +104,24 @@ pub struct NextSwitch {
     pub at: DateTime<Local>,
 }
 
+pub fn paused_until(cfg: &Config, now: DateTime<Local>) -> Option<DateTime<Local>> {
+    cfg.paused_until
+        .filter(|until| cfg.auto_enabled && now < *until)
+}
+
+pub fn manual_hold_until(
+    cfg: &Config,
+    target: Theme,
+    now: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let scheduled = desired_theme(cfg, now)?;
+    (cfg.auto_enabled && scheduled != target).then(|| {
+        next_switch(cfg, now)
+            .map(|sw| sw.at)
+            .unwrap_or_else(|| now + chrono::Duration::days(1))
+    })
+}
+
 pub fn hold_active(cfg: &Config, want: Theme, now: DateTime<Local>) -> bool {
     matches!(
         (cfg.manual_hold, cfg.manual_hold_until),
@@ -191,6 +209,13 @@ pub fn next_switch(cfg: &Config, now: DateTime<Local>) -> Option<NextSwitch> {
 }
 
 pub fn next_switch_info(cfg: &Config, now: DateTime<Local>) -> String {
+    if let Some(until) = paused_until(cfg, now) {
+        let when = until.format("%d.%m %H:%M");
+        return match lang_of(cfg) {
+            Lang::En => format!("Paused until {when}"),
+            Lang::Ru => format!("Пауза до {when}"),
+        };
+    }
     if let Some(sw) = next_switch(cfg, now) {
         let lang = lang_of(cfg);
         let name = i18n::next_theme_word(lang, sw.dark);
@@ -304,6 +329,45 @@ mod tests {
 
     fn minute(m: u32) -> NaiveTime {
         NaiveTime::from_hms_opt(m / 60, m % 60, 0).unwrap()
+    }
+
+    #[test]
+    fn manual_override_lasts_until_scheduled_transition() {
+        let now = Local
+            .with_ymd_and_hms(2026, 1, 15, 12, 0, 0)
+            .single()
+            .unwrap();
+        let mut cfg = Config {
+            auto_enabled: true,
+            ..Config::default()
+        };
+        assert_eq!(manual_hold_until(&cfg, Theme::Light, now), None);
+        let next = next_switch(&cfg, now).unwrap().at;
+        cfg.manual_hold = Some(Theme::Dark);
+        cfg.manual_hold_until = manual_hold_until(&cfg, Theme::Dark, now);
+        assert_eq!(cfg.manual_hold_until, Some(next));
+        assert!(hold_active(&cfg, Theme::Light, next - Duration::seconds(1)));
+        assert!(!hold_active(&cfg, Theme::Dark, next));
+    }
+
+    #[test]
+    fn timed_pause_expires_without_changing_schedule() {
+        let now = Local
+            .with_ymd_and_hms(2026, 1, 15, 12, 0, 0)
+            .single()
+            .unwrap();
+        let until = now + Duration::hours(1);
+        let mut cfg = Config {
+            auto_enabled: true,
+            paused_until: Some(until),
+            ..Config::default()
+        };
+        assert_eq!(paused_until(&cfg, now), Some(until));
+        assert!(next_switch_info(&cfg, now).starts_with("Paused until"));
+        assert_eq!(paused_until(&cfg, until), None);
+        assert!(next_switch_info(&cfg, until).starts_with("Next:"));
+        cfg.auto_enabled = false;
+        assert_eq!(paused_until(&cfg, now), None);
     }
 
     #[test]

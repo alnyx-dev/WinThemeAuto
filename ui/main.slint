@@ -1,4 +1,113 @@
-import { Switch, CheckBox, LineEdit, Button, ComboBox, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Switch, CheckBox, LineEdit, ComboBox, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <string> held-key;
+    private property <bool> pressed: root.enabled && (root.held-key != "" || (hit-area.pressed && hit-area.has-hover));
+
+    min-width: max(32px, caption.preferred-width + 24px);
+    min-height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: keyboard;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled { root.clicked(); }
+    }
+
+    changed enabled => { if !root.enabled { root.held-key = ""; } }
+
+    states [
+        disabled when !root.enabled : {
+            face.background: root.primary ? #e0e7f0 : #f0f3f7;
+            face.border-color: #e1e7ef;
+            caption.color: #52647b;
+        }
+        down when root.pressed : {
+            face.y: 1px;
+            face.background: root.primary ? #17375b : #dce8f7;
+            face.border-color: root.primary ? #17375b : #9db4cf;
+            out {
+                animate face.y { duration: 95ms; easing: ease-out; }
+            }
+        }
+        hover when root.enabled && hit-area.has-hover : {
+            face.background: root.primary ? #355b85 : #eef5ff;
+            face.border-color: root.primary ? #355b85 : #afc4df;
+        }
+    ]
+
+    face := Rectangle {
+        y: 0;
+        width: parent.width;
+        height: parent.height - self.y;
+        background: root.primary ? #28496e : #ffffff;
+        border-color: root.primary ? #28496e : #d6e0ec;
+        border-width: 1px;
+        border-radius: 6px;
+
+        caption := Text {
+            x: 8px;
+            width: parent.width - 16px;
+            height: parent.height;
+            text: root.text;
+            color: root.primary ? #ffffff : #203753;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    if keyboard.has-focus && root.enabled : Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-width: 1px;
+        border-radius: 4px;
+        border-color: root.primary ? #ffffff : #205997;
+    }
+
+    hit-area := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            keyboard.focus();
+            root.clicked();
+        }
+    }
+
+    keyboard := FocusScope {
+        width: 0px;
+        enabled: root.enabled;
+        changed has-focus => {
+            if !self.has-focus { root.held-key = ""; }
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                if (root.held-key == "") { root.held-key = event.text; }
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (root.held-key != "" && event.text == root.held-key) {
+                root.held-key = "";
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
 
 component AccentSwatch inherits Rectangle {
     in property <color> swatch-color;
@@ -13,9 +122,20 @@ component AccentSwatch inherits Rectangle {
     border-width: (active || fs.has-focus) ? 2px : 1px;
     border-color: fs.has-focus ? #2563eb : (active ? #0f172a : #00000033);
 
+    face := Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-radius: 4px;
+        border-color: area.pressed ? #00000055 : area.has-hover ? #ffffffaa : transparent;
+        border-width: 1px;
+    }
+
     fs := FocusScope {
         accessible-role: button;
         accessible-label: "accent color " + root.hex;
+        accessible-action-default => { root.chosen(root.hex); }
         key-pressed(event) => {
             if (event.text == "\n" || event.text == " ") {
                 root.chosen(root.hex);
@@ -26,7 +146,7 @@ component AccentSwatch inherits Rectangle {
         }
     }
 
-    TouchArea {
+    area := TouchArea {
         width: parent.width;
         height: parent.height;
         mouse-cursor: pointer;
@@ -34,14 +154,123 @@ component AccentSwatch inherits Rectangle {
     }
 }
 
+struct AccentOption {
+    color: color,
+    hex: string,
+}
+
+component AccentEditor inherits Rectangle {
+    in property <bool> compact;
+    in property <string> label;
+    in-out property <string> value;
+    callback edited();
+    private property <length> label-width: 60px;
+    private property <length> palette-width: 218px;
+    private property <[AccentOption]> colors: [
+        { color: #FFB900, hex: "FFB900" },
+        { color: #E81123, hex: "E81123" },
+        { color: #EC008C, hex: "EC008C" },
+        { color: #B4009E, hex: "B4009E" },
+        { color: #744DA9, hex: "744DA9" },
+        { color: #0078D4, hex: "0078D4" },
+        { color: #00B7C3, hex: "00B7C3" },
+        { color: #107C10, hex: "107C10" },
+    ];
+
+    min-height: compact ? 60px : 32px;
+    preferred-height: self.min-height;
+
+    HorizontalBox {
+        x: 0;
+        y: 0;
+        width: root.width - (root.compact ? 0px : root.palette-width + 8px);
+        height: 32px;
+        padding: 0px;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: #52647b;
+            font-size: 12px;
+            width: root.label-width;
+            vertical-alignment: center;
+        }
+        LineEdit {
+            text <=> root.value;
+            placeholder-text: "0078D4";
+            horizontal-stretch: 1;
+            accepted => { root.edited(); }
+            edited(_value) => { root.edited(); }
+        }
+    }
+
+    HorizontalBox {
+        x: root.compact ? root.label-width + 6px : root.width - root.palette-width;
+        y: root.compact ? 38px : 5px;
+        width: root.palette-width;
+        height: 22px;
+        padding: 0px;
+        spacing: 6px;
+        for option in root.colors : AccentSwatch {
+            swatch-color: option.color;
+            hex: option.hex;
+            active: root.value == option.hex;
+            chosen(hex) => { root.value = hex; root.edited(); }
+        }
+    }
+}
+
+component Panel inherits Rectangle {
+    background: #ffffff;
+    border-width: 1px;
+    border-color: #dee5ef;
+    border-radius: 12px;
+}
+
+component SectionTitle inherits Text {
+    color: #142842;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+component SectionNav inherits Panel {
+    in property <bool> compact;
+    in property <[string]> labels;
+    in-out property <int> selected;
+    private property <length> inset: compact ? 6px : 9px;
+    private property <length> gap: 6px;
+    private property <length> item-height: 36px;
+
+    min-height: compact ? item-height + 2 * inset : 3 * item-height + 2 * gap + 2 * inset;
+
+    for label[index] in root.labels : ActionButton {
+        x: root.compact ? root.inset + index * (self.width + root.gap) : root.inset;
+        y: root.compact ? root.inset : root.inset + index * (root.item-height + root.gap);
+        width: root.compact ? (root.width - 2 * root.inset - 2 * root.gap) / 3 : root.width - 2 * root.inset;
+        height: root.item-height;
+        text: label;
+        primary: root.selected == index;
+        clicked => { root.selected = index; }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "WinThemeAuto";
     icon: @image-url("../icon.svg");
-    background: #eef1f6;
-    preferred-width: 500px;
-    min-width: 480px;
+    default-font-family: "Segoe UI";
+    background: #eef2f8;
+    preferred-width: 760px;
+    preferred-height: 660px;
+    min-width: 460px;
+    min-height: 380px;
+
+    private property <bool> compact;
+    changed width => { root.compact = self.width < 700px; }
+    private property <[string]> section-labels: [t-tab-auto, t-tab-appearance, t-tab-settings];
 
     in property <bool> is-dark;
+    in property <bool> schedule-enabled;
+    in property <bool> schedule-paused;
+    in property <bool> has-next-switch;
     in property <string> status;
     in property <string> sun-info;
     in property <string> next-switch;
@@ -62,6 +291,8 @@ export component MainWindow inherits Window {
     in-out property <bool> show-advanced;
     in property <string> app-version;
     in property <string> update-info;
+    in property <string> available-version;
+    in property <bool> downloading-update;
     in property <bool> update-ok;
     in property <bool> checking-update;
     in property <[string]> light-themes;
@@ -125,6 +356,7 @@ export component MainWindow inherits Window {
     in property <string> t-rescan;
     in property <string> t-autostart;
     in property <string> t-check-updates;
+    in property <string> t-install-update;
     in property <string> t-checking;
     in property <string> t-apply;
     in property <string> t-to-light;
@@ -134,7 +366,13 @@ export component MainWindow inherits Window {
     in property <string> t-language;
     in property <string> t-releases;
     in property <string> t-logs;
-    in property <string> t-onboard;
+    in property <string> t-schedule-off;
+    in property <string> t-pause-hour;
+    in property <string> t-pause-next;
+    in property <string> t-resume-schedule;
+    in property <string> t-desktop;
+    in property <string> t-updates;
+    in property <string> t-unsaved;
     in property <string> t-cancel;
     in property <string> t-close-title;
     in property <string> t-close-body;
@@ -143,6 +381,9 @@ export component MainWindow inherits Window {
     in property <string> t-close-never;
 
     callback toggle-theme();
+    callback pause-hour();
+    callback pause-next();
+    callback resume-schedule();
     callback settings-changed();
     callback apply-settings();
     callback language-changed();
@@ -155,6 +396,7 @@ export component MainWindow inherits Window {
     callback browse-light-lockscreen();
     callback browse-dark-lockscreen();
     callback check-updates();
+    callback install-update();
     callback cancel-update();
     callback open-releases();
     callback open-logs();
@@ -167,676 +409,660 @@ export component MainWindow inherits Window {
     callback close-quit();
 
     in-out property <int> tab-index: 0;
+    changed tab-index => { scroll.content-y = 0px; }
 
     VerticalBox {
-        padding: 10px;
-        spacing: 8px;
-        alignment: start;
+        padding: root.compact ? 10px : 16px;
+        spacing: root.compact ? 8px : 12px;
 
         Rectangle {
-            background: white;
-            border-width: 1px;
-            border-color: #e2e8f0;
-            border-radius: 10px;
-            VerticalBox {
-                padding: 10px;
-                spacing: 8px;
-                HorizontalBox {
+            background: root.is-dark ? #15274e : #213d61;
+            border-radius: 14px;
+
+            HorizontalBox {
+                padding: root.compact ? 10px : 16px;
+                spacing: root.compact ? 10px : 14px;
+                Image {
+                    source: root.is-dark ? @image-url("../dark-tray-icon.svg") : @image-url("../light-tray-icon.svg");
+                    width: root.compact ? 36px : 44px;
+                    height: self.width;
+                }
+                VerticalBox {
                     padding: 0px;
-                    spacing: 10px;
-                    Image {
-                        source: @image-url("../icon.svg");
-                        width: 32px;
-                        height: 32px;
+                    spacing: 2px;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.is-dark ? root.t-dark-now : root.t-light-now;
+                        font-size: root.compact ? 18px : 22px;
+                        overflow: elide;
+                        font-weight: 700;
+                        color: #ffffff;
                     }
-                    VerticalBox {
-                        padding: 0px;
-                        spacing: 0px;
-                        horizontal-stretch: 1;
-                        Text {
-                            text: "WinThemeAuto";
-                            font-size: 16px;
-                            font-weight: 700;
-                            color: #0f172a;
-                        }
-                        Text {
-                            text: root.next-switch != "" ? (root.is-dark ? root.t-dark-now + " • " : root.t-light-now + " • ") + root.next-switch : (root.is-dark ? root.t-dark-now : root.t-light-now);
-                            font-size: 12px;
-                            color: #64748b;
-                            overflow: elide;
-                        }
-                        if !root.auto-enabled : Text {
-                            text: root.t-onboard;
-                            font-size: 11px;
-                            color: #64748b;
-                            wrap: word-wrap;
-                        }
+                    Text {
+                        text: root.next-switch != "" ? root.next-switch
+                            : root.schedule-enabled ? "" : root.t-schedule-off;
+                        font-size: 13px;
+                        color: #cfddf1;
+                        overflow: elide;
                     }
-                    Button {
-                        text: root.is-dark ? root.t-to-light : root.t-to-dark;
-                        primary: true;
-                        min-width: 110px;
-                        clicked => { root.toggle-theme(); }
-                    }
+                }
+                ActionButton {
+                    text: root.is-dark ? root.t-to-light : root.t-to-dark;
+                    min-width: root.compact ? 88px : 106px;
+                    clicked => { root.toggle-theme(); }
                 }
             }
         }
 
+        if root.compact : SectionNav {
+            compact: true;
+            labels: root.section-labels;
+            selected <=> root.tab-index;
+            vertical-stretch: 0;
+        }
 
         HorizontalBox {
             padding: 0px;
-            spacing: 6px;
-            Button {
-                text: root.t-tab-auto;
-                primary: root.tab-index == 0;
-                horizontal-stretch: 1;
-                clicked => { root.tab-index = 0; }
-            }
-            Button {
-                text: root.t-tab-appearance;
-                primary: root.tab-index == 1;
-                horizontal-stretch: 1;
-                clicked => { root.tab-index = 1; }
-            }
-            Button {
-                text: root.t-tab-settings;
-                primary: root.tab-index == 2;
-                horizontal-stretch: 1;
-                clicked => { root.tab-index = 2; }
-            }
-        }
+            spacing: 14px;
+            vertical-stretch: 1;
 
-        Rectangle {
-            height: 560px;
-            VerticalBox {
-                padding: 0px;
-                spacing: 0px;
-                alignment: start;
-        if root.tab-index == 0 : Rectangle {
-            background: white;
-            border-width: 1px;
-            border-color: #e2e8f0;
-            border-radius: 10px;
-            VerticalBox {
-                padding: 10px;
-                spacing: 8px;
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 8px;
-                    Text {
-                        text: root.t-auto-title;
-                        font-size: 13px;
-                        font-weight: 700;
-                        color: #0f172a;
-                        horizontal-stretch: 1;
-                        vertical-alignment: center;
-                    }
-                    Switch {
-                        checked <=> root.auto-enabled;
-                        toggled => { root.settings-changed(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Button {
-                        text: root.t-mode-time;
-                        primary: root.mode-index == 0;
-                        horizontal-stretch: 1;
-                        clicked => {
-                            root.mode-index = 0;
-                            root.settings-changed();
-                        }
-                    }
-                    Button {
-                        text: root.t-mode-sun;
-                        primary: root.mode-index == 1;
-                        horizontal-stretch: 1;
-                        clicked => {
-                            root.mode-index = 1;
-                            root.settings-changed();
-                        }
-                    }
-                }
-
-                if root.mode-index == 0 : VerticalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 8px;
-                        Text {
-                            text: root.t-light-from;
-                            font-size: 13px;
-                            color: #334155;
-                            horizontal-stretch: 1;
-                            vertical-alignment: center;
-                        }
-                        LineEdit {
-                            text <=> root.light-at;
-                            placeholder-text: "07:00";
-                            width: 90px;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                        Text {
-                            text: root.t-dark-from;
-                            font-size: 13px;
-                            color: #334155;
-                            horizontal-stretch: 1;
-                            vertical-alignment: center;
-                        }
-                        LineEdit {
-                            text <=> root.dark-at;
-                            placeholder-text: "19:00";
-                            width: 90px;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                    }
-                }
-
-                if root.mode-index == 1 : VerticalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 6px;
-                        LineEdit {
-                            text <=> root.lat;
-                            placeholder-text: root.t-lat-ph;
-                            horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                        LineEdit {
-                            text <=> root.lon;
-                            placeholder-text: root.t-lon-ph;
-                            horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                        Button {
-                            text: root.locating ? "…" : root.t-detect;
-                            enabled: !root.locating;
-                            min-width: 92px;
-                            clicked => { root.detect-location(); }
-                        }
-                    }
-                    Text {
-                        text: root.geo-hint;
-                        height: 14px;
-                        font-size: 11px;
-                        color: #64748b;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: root.sun-info;
-                        height: 14px;
-                        font-size: 11px;
-                        color: #92400e;
-                        overflow: elide;
-                    }
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 6px;
-                        Text {
-                            text: root.t-light-pm;
-                            font-size: 12px;
-                            color: #334155;
-                            vertical-alignment: center;
-                        }
-                        LineEdit {
-                            text <=> root.light-offset;
-                            placeholder-text: "-180…180";
-                            horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                        Text {
-                            text: root.t-dark-pm;
-                            font-size: 12px;
-                            color: #334155;
-                            vertical-alignment: center;
-                        }
-                        LineEdit {
-                            text <=> root.dark-offset;
-                            placeholder-text: "-180…180";
-                            horizontal-stretch: 1;
-                            accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                        }
-                    }
-                }
-                Rectangle {
-                    height: 1px;
-                    background: #f1f5f9;
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 8px;
-                    Text {
-                        text: root.t-apply-to;
-                        font-size: 12px;
-                        color: #64748b;
-                        vertical-alignment: center;
-                    }
-                    CheckBox {
-                        text: root.t-apps;
-                        checked <=> root.change-apps;
-                        toggled => { root.settings-changed(); }
-                    }
-                    CheckBox {
-                        text: root.t-system;
-                        checked <=> root.change-system;
-                        toggled => { root.settings-changed(); }
-                    }
-                }
+            if !root.compact : SectionNav {
+                width: 162px;
+                labels: root.section-labels;
+                selected <=> root.tab-index;
             }
-        }
 
-        if root.tab-index == 1 : Rectangle {
-            background: white;
-            border-width: 1px;
-            border-color: #e2e8f0;
-            border-radius: 10px;
-            VerticalBox {
-                padding: 10px;
-                spacing: 6px;
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: root.t-light-label;
-                        font-size: 12px;
-                        color: #64748b;
-                        width: 60px;
-                        vertical-alignment: center;
-                    }
-                    ComboBox {
-                        model: root.light-themes;
-                        current-index <=> root.light-theme-index;
-                        horizontal-stretch: 1;
-                        selected => { root.settings-changed(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: root.t-dark-label;
-                        font-size: 12px;
-                        color: #64748b;
-                        width: 60px;
-                        vertical-alignment: center;
-                    }
-                    ComboBox {
-                        model: root.dark-themes;
-                        current-index <=> root.dark-theme-index;
-                        horizontal-stretch: 1;
-                        selected => { root.settings-changed(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: "";
-                        width: 60px;
-                    }
-                    Button {
-                        text: root.t-rescan;
-                        horizontal-stretch: 1;
-                        clicked => { root.refresh-themes(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    if root.light-wp-has : Rectangle {
-                        width: 56px;
-                        height: 32px;
-                        border-radius: 6px;
-                        clip: true;
-                        background: #00000022;
-                        Image {
-                            width: 100%;
-                            height: 100%;
-                            source: root.light-wp-preview;
-                            image-fit: cover;
-                        }
-                    }
-                    LineEdit {
-                        text <=> root.light-wallpaper;
-                        placeholder-text: root.t-light-wp-ph;
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    Button {
-                        text: "…";
-                        clicked => { root.browse-light-wallpaper(); }
-                    }
-                    Button {
-                        text: root.t-folder;
-                        clicked => { root.browse-light-slideshow(); }
-                    }
-                    Button {
-                        text: "×";
-                        clicked => { root.clear-light-wallpaper(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    if root.dark-wp-has : Rectangle {
-                        width: 56px;
-                        height: 32px;
-                        border-radius: 6px;
-                        clip: true;
-                        background: #00000022;
-                        Image {
-                            width: 100%;
-                            height: 100%;
-                            source: root.dark-wp-preview;
-                            image-fit: cover;
-                        }
-                    }
-                    LineEdit {
-                        text <=> root.dark-wallpaper;
-                        placeholder-text: root.t-dark-wp-ph;
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    Button {
-                        text: "…";
-                        clicked => { root.browse-dark-wallpaper(); }
-                    }
-                    Button {
-                        text: root.t-folder;
-                        clicked => { root.browse-dark-slideshow(); }
-                    }
-                    Button {
-                        text: "×";
-                        clicked => { root.clear-dark-wallpaper(); }
-                    }
-                }
-                Text {
-                    text: root.t-wp-hint;
-                    font-size: 11px;
-                    color: #94a3b8;
-                    wrap: word-wrap;
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: root.t-slideshow-interval;
-                        font-size: 12px;
-                        color: #64748b;
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> root.slideshow-interval;
-                        placeholder-text: "30";
-                        width: 70px;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    CheckBox {
-                        text: root.t-slideshow-shuffle;
-                        checked <=> root.slideshow-shuffle;
-                        toggled => { root.settings-changed(); }
-                    }
-                }
-                Text {
-                    text: root.t-slideshow-hint;
-                    font-size: 11px;
-                    color: #94a3b8;
-                    wrap: word-wrap;
-                }
-                Rectangle {
-                    height: 1px;
-                    background: #f1f5f9;
-                }
-                CheckBox {
-                    text: root.t-lock-check;
-                    checked <=> root.lockscreen-enabled;
-                    toggled => { root.settings-changed(); }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    if root.light-lock-has : Rectangle {
-                        width: 56px;
-                        height: 32px;
-                        border-radius: 6px;
-                        clip: true;
-                        background: #00000022;
-                        Image {
-                            width: 100%;
-                            height: 100%;
-                            source: root.light-lock-preview;
-                            image-fit: cover;
-                        }
-                    }
-                    LineEdit {
-                        text <=> root.light-lockscreen;
-                        placeholder-text: root.t-light-lock-ph;
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    Button {
-                        text: "…";
-                        clicked => { root.browse-light-lockscreen(); }
-                    }
-                    Button {
-                        text: "×";
-                        clicked => { root.clear-light-lockscreen(); }
-                    }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    if root.dark-lock-has : Rectangle {
-                        width: 56px;
-                        height: 32px;
-                        border-radius: 6px;
-                        clip: true;
-                        background: #00000022;
-                        Image {
-                            width: 100%;
-                            height: 100%;
-                            source: root.dark-lock-preview;
-                            image-fit: cover;
-                        }
-                    }
-                    LineEdit {
-                        text <=> root.dark-lockscreen;
-                        placeholder-text: root.t-dark-lock-ph;
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    Button {
-                        text: "…";
-                        clicked => { root.browse-dark-lockscreen(); }
-                    }
-                    Button {
-                        text: "×";
-                        clicked => { root.clear-dark-lockscreen(); }
-                    }
-                }
-                Text {
-                    text: root.t-lock-hint;
-                    font-size: 11px;
-                    color: #94a3b8;
-                    wrap: word-wrap;
-                }
-                Rectangle {
-                    height: 1px;
-                    background: #f1f5f9;
-                }
-                CheckBox {
-                    text: root.t-accent-check;
-                    checked <=> root.accent-enabled;
-                    toggled => { root.settings-changed(); }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: root.t-light-label;
-                        font-size: 12px;
-                        color: #64748b;
-                        width: 60px;
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> root.light-accent;
-                        placeholder-text: "0078D4";
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.light-accent == "FFB900"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.light-accent == "E81123"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #EC008C; hex: "EC008C"; active: root.light-accent == "EC008C"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #B4009E; hex: "B4009E"; active: root.light-accent == "B4009E"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #744DA9; hex: "744DA9"; active: root.light-accent == "744DA9"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #0078D4; hex: "0078D4"; active: root.light-accent == "0078D4"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #00B7C3; hex: "00B7C3"; active: root.light-accent == "00B7C3"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #107C10; hex: "107C10"; active: root.light-accent == "107C10"; chosen(h) => { root.light-accent = h; root.settings-changed(); } }
-                }
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 6px;
-                    Text {
-                        text: root.t-dark-label;
-                        font-size: 12px;
-                        color: #64748b;
-                        width: 60px;
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> root.dark-accent;
-                        placeholder-text: "0078D4";
-                        horizontal-stretch: 1;
-                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
-                    }
-                    AccentSwatch { swatch-color: #FFB900; hex: "FFB900"; active: root.dark-accent == "FFB900"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #E81123; hex: "E81123"; active: root.dark-accent == "E81123"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #EC008C; hex: "EC008C"; active: root.dark-accent == "EC008C"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #B4009E; hex: "B4009E"; active: root.dark-accent == "B4009E"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #744DA9; hex: "744DA9"; active: root.dark-accent == "744DA9"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #0078D4; hex: "0078D4"; active: root.dark-accent == "0078D4"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #00B7C3; hex: "00B7C3"; active: root.dark-accent == "00B7C3"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                    AccentSwatch { swatch-color: #107C10; hex: "107C10"; active: root.dark-accent == "107C10"; chosen(h) => { root.dark-accent = h; root.settings-changed(); } }
-                }
-                Text {
-                    text: root.t-accent-hint;
-                    font-size: 10px;
-                    color: #94a3b8;
-                    overflow: elide;
-                }
-            }
-        }
+            scroll := ScrollView {
+                horizontal-scrollbar-policy: always-off;
+                content-width: self.visible-width;
+                content-height: page.height;
 
-        if root.tab-index == 2 : VerticalBox {
-            padding: 0px;
-            spacing: 8px;
-            Rectangle {
-                background: white;
-                border-width: 1px;
-                border-color: #e2e8f0;
-                border-radius: 10px;
-                VerticalBox {
-                    padding: 10px;
-                    spacing: 8px;
-                    CheckBox {
-                        text: root.t-autostart;
-                        checked <=> root.autostart;
-                        toggled => { root.autostart-changed(); }
-                    }
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 6px;
-                        Text {
-                            text: root.t-language;
-                            font-size: 13px;
-                            color: #334155;
-                            horizontal-stretch: 1;
-                            vertical-alignment: center;
-                        }
-                        Button {
-                            text: "EN";
-                            primary: root.lang-index == 0;
-                            clicked => {
-                                root.lang-index = 0;
-                                root.language-changed();
+                page := VerticalBox {
+                    padding: 0px;
+                    padding-right: 14px;
+                    spacing: 10px;
+                    width: scroll.visible-width;
+                    height: self.preferred-height;
+                    alignment: start;
+
+                    if root.tab-index == 0 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 8px;
+                                SectionTitle {
+                                    text: root.t-auto-title;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                }
+                                Switch {
+                                    checked <=> root.auto-enabled;
+                                    toggled => { root.settings-changed(); }
+                                }
                             }
-                        }
-                        Button {
-                            text: "RU";
-                            primary: root.lang-index == 1;
-                            clicked => {
-                                root.lang-index = 1;
-                                root.language-changed();
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                ActionButton {
+                                    text: root.t-mode-time;
+                                    primary: root.mode-index == 0;
+                                    horizontal-stretch: 1;
+                                    clicked => {
+                                        root.mode-index = 0;
+                                        root.settings-changed();
+                                    }
+                                }
+                                ActionButton {
+                                    text: root.t-mode-sun;
+                                    primary: root.mode-index == 1;
+                                    horizontal-stretch: 1;
+                                    clicked => {
+                                        root.mode-index = 1;
+                                        root.settings-changed();
+                                    }
+                                }
+                            }
+
+                            if root.mode-index == 0 : VerticalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                HorizontalBox {
+                                    padding: 0px;
+                                    spacing: 8px;
+                                    Text {
+                                        text: root.t-light-from;
+                                        font-size: 13px;
+                                        color: #334155;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    LineEdit {
+                                        text <=> root.light-at;
+                                        placeholder-text: "07:00";
+                                        width: 90px;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                    Text {
+                                        text: root.t-dark-from;
+                                        font-size: 13px;
+                                        color: #334155;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    LineEdit {
+                                        text <=> root.dark-at;
+                                        placeholder-text: "19:00";
+                                        width: 90px;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                }
+                            }
+
+                            if root.mode-index == 1 : VerticalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                HorizontalBox {
+                                    padding: 0px;
+                                    spacing: 6px;
+                                    LineEdit {
+                                        text <=> root.lat;
+                                        min-width: 70px;
+                                        placeholder-text: root.t-lat-ph;
+                                        horizontal-stretch: 1;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                    LineEdit {
+                                        text <=> root.lon;
+                                        min-width: 70px;
+                                        placeholder-text: root.t-lon-ph;
+                                        horizontal-stretch: 1;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                    ActionButton {
+                                        text: root.locating ? "…" : root.t-detect;
+                                        enabled: !root.locating;
+                                        min-width: 92px;
+                                        clicked => { root.detect-location(); }
+                                    }
+                                }
+                                Text {
+                                    text: root.geo-hint;
+                                    height: 14px;
+                                    font-size: 11px;
+                                    color: #64748b;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: root.sun-info;
+                                    height: 14px;
+                                    font-size: 11px;
+                                    color: #92400e;
+                                    overflow: elide;
+                                }
+                                HorizontalBox {
+                                    padding: 0px;
+                                    spacing: 6px;
+                                    Text {
+                                        text: root.t-light-pm;
+                                        font-size: 12px;
+                                        color: #334155;
+                                        vertical-alignment: center;
+                                    }
+                                    LineEdit {
+                                        text <=> root.light-offset;
+                                        min-width: 70px;
+                                        placeholder-text: "-180…180";
+                                        horizontal-stretch: 1;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                    Text {
+                                        text: root.t-dark-pm;
+                                        font-size: 12px;
+                                        color: #334155;
+                                        vertical-alignment: center;
+                                    }
+                                    LineEdit {
+                                        text <=> root.dark-offset;
+                                        min-width: 70px;
+                                        placeholder-text: "-180…180";
+                                        horizontal-stretch: 1;
+                                        accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                height: 1px;
+                                background: #f1f5f9;
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 8px;
+                                Text {
+                                    text: root.t-apply-to;
+                                    font-size: 12px;
+                                    color: #64748b;
+                                    vertical-alignment: center;
+                                }
+                                CheckBox {
+                                    text: root.t-apps;
+                                    checked <=> root.change-apps;
+                                    toggled => { root.settings-changed(); }
+                                }
+                                CheckBox {
+                                    text: root.t-system;
+                                    checked <=> root.change-system;
+                                    toggled => { root.settings-changed(); }
+                                }
                             }
                         }
                     }
-                }
-            }
-            Rectangle {
-                background: white;
-                border-width: 1px;
-                border-color: #e2e8f0;
-                border-radius: 10px;
-                VerticalBox {
-                    padding: 10px;
-                    spacing: 8px;
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 8px;
-                        Button {
-                            text: root.checking-update ? root.t-checking : root.t-check-updates;
-                            enabled: !root.checking-update;
-                            clicked => { root.check-updates(); }
-                        }
-                        Text {
-                            text: root.update-info != "" ? root.update-info : "v" + root.app-version;
-                            font-size: 11px;
-                            color: root.update-ok ? #15803d : #94a3b8;
-                            vertical-alignment: center;
-                            horizontal-alignment: right;
-                            horizontal-stretch: 1;
-                            overflow: elide;
-                        }
-                        if !root.checking-update : Button {
-                            text: root.t-releases;
-                            clicked => { root.open-releases(); }
-                        }
-                        if root.checking-update : Button {
-                            text: root.t-cancel;
-                            clicked => { root.cancel-update(); }
+
+                    if root.tab-index == 0 && root.schedule-enabled : Panel {
+                        HorizontalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            alignment: start;
+                            if root.schedule-paused : ActionButton {
+                                text: root.t-resume-schedule;
+                                primary: true;
+                                clicked => { root.resume-schedule(); }
+                            }
+                            if !root.schedule-paused : ActionButton {
+                                text: root.t-pause-hour;
+                                clicked => { root.pause-hour(); }
+                            }
+                            if !root.schedule-paused && root.has-next-switch : ActionButton {
+                                text: root.t-pause-next;
+                                clicked => { root.pause-next(); }
+                            }
                         }
                     }
-                    HorizontalBox {
-                        padding: 0px;
-                        spacing: 8px;
-                        Button {
-                            text: root.t-logs;
-                            clicked => { root.open-logs(); }
+
+                    if root.tab-index == 1 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            SectionTitle { text: root.t-desktop; }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-light-label;
+                                    font-size: 12px;
+                                    color: #64748b;
+                                    width: 60px;
+                                    vertical-alignment: center;
+                                }
+                                ComboBox {
+                                    model: root.light-themes;
+                                    current-index <=> root.light-theme-index;
+                                    horizontal-stretch: 1;
+                                    selected => { root.settings-changed(); }
+                                }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-dark-label;
+                                    font-size: 12px;
+                                    color: #64748b;
+                                    width: 60px;
+                                    vertical-alignment: center;
+                                }
+                                ComboBox {
+                                    model: root.dark-themes;
+                                    current-index <=> root.dark-theme-index;
+                                    horizontal-stretch: 1;
+                                    selected => { root.settings-changed(); }
+                                }
+                            }
+                            ActionButton {
+                                text: root.t-rescan;
+                                horizontal-stretch: 0;
+                                clicked => { root.refresh-themes(); }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-light-label;
+                                    font-size: 12px;
+                                    color: #52647b;
+                                    width: 60px;
+                                    vertical-alignment: center;
+                                }
+                                if root.light-wp-has : Rectangle {
+                                    width: 56px;
+                                    height: 32px;
+                                    border-radius: 6px;
+                                    clip: true;
+                                    background: #00000022;
+                                    Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: root.light-wp-preview;
+                                        image-fit: cover;
+                                    }
+                                }
+                                LineEdit {
+                                    text <=> root.light-wallpaper;
+                                    placeholder-text: root.t-light-wp-ph;
+                                    horizontal-stretch: 1;
+                                    accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                }
+                                ActionButton {
+                                    text: "…";
+                                    clicked => { root.browse-light-wallpaper(); }
+                                }
+                                ActionButton {
+                                    text: root.t-folder;
+                                    clicked => { root.browse-light-slideshow(); }
+                                }
+                                ActionButton {
+                                    text: "×";
+                                    clicked => { root.clear-light-wallpaper(); }
+                                }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-dark-label;
+                                    font-size: 12px;
+                                    color: #52647b;
+                                    width: 60px;
+                                    vertical-alignment: center;
+                                }
+                                if root.dark-wp-has : Rectangle {
+                                    width: 56px;
+                                    height: 32px;
+                                    border-radius: 6px;
+                                    clip: true;
+                                    background: #00000022;
+                                    Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: root.dark-wp-preview;
+                                        image-fit: cover;
+                                    }
+                                }
+                                LineEdit {
+                                    text <=> root.dark-wallpaper;
+                                    placeholder-text: root.t-dark-wp-ph;
+                                    horizontal-stretch: 1;
+                                    accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                }
+                                ActionButton {
+                                    text: "…";
+                                    clicked => { root.browse-dark-wallpaper(); }
+                                }
+                                ActionButton {
+                                    text: root.t-folder;
+                                    clicked => { root.browse-dark-slideshow(); }
+                                }
+                                ActionButton {
+                                    text: "×";
+                                    clicked => { root.clear-dark-wallpaper(); }
+                                }
+                            }
+                            Text {
+                                text: root.t-wp-hint;
+                                font-size: 11px;
+                                color: #52647b;
+                                wrap: word-wrap;
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-slideshow-interval;
+                                    font-size: 12px;
+                                    color: #64748b;
+                                    vertical-alignment: center;
+                                }
+                                LineEdit {
+                                    text <=> root.slideshow-interval;
+                                    placeholder-text: "30";
+                                    width: 70px;
+                                    accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                }
+                                CheckBox {
+                                    text: root.t-slideshow-shuffle;
+                                    checked <=> root.slideshow-shuffle;
+                                    toggled => { root.settings-changed(); }
+                                }
+                            }
+                            Text {
+                                text: root.t-slideshow-hint;
+                                font-size: 11px;
+                                color: #52647b;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    if root.tab-index == 1 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            CheckBox {
+                                text: root.t-lock-check;
+                                checked <=> root.lockscreen-enabled;
+                                toggled => { root.settings-changed(); }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                if root.light-lock-has : Rectangle {
+                                    width: 56px;
+                                    height: 32px;
+                                    border-radius: 6px;
+                                    clip: true;
+                                    background: #00000022;
+                                    Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: root.light-lock-preview;
+                                        image-fit: cover;
+                                    }
+                                }
+                                LineEdit {
+                                    text <=> root.light-lockscreen;
+                                    placeholder-text: root.t-light-lock-ph;
+                                    horizontal-stretch: 1;
+                                    accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                }
+                                ActionButton {
+                                    text: "…";
+                                    clicked => { root.browse-light-lockscreen(); }
+                                }
+                                ActionButton {
+                                    text: "×";
+                                    clicked => { root.clear-light-lockscreen(); }
+                                }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                if root.dark-lock-has : Rectangle {
+                                    width: 56px;
+                                    height: 32px;
+                                    border-radius: 6px;
+                                    clip: true;
+                                    background: #00000022;
+                                    Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: root.dark-lock-preview;
+                                        image-fit: cover;
+                                    }
+                                }
+                                LineEdit {
+                                    text <=> root.dark-lockscreen;
+                                    placeholder-text: root.t-dark-lock-ph;
+                                    horizontal-stretch: 1;
+                                    accepted => { root.settings-changed(); } edited(_t) => { root.settings-changed(); }
+                                }
+                                ActionButton {
+                                    text: "…";
+                                    clicked => { root.browse-dark-lockscreen(); }
+                                }
+                                ActionButton {
+                                    text: "×";
+                                    clicked => { root.clear-dark-lockscreen(); }
+                                }
+                            }
+                            Text {
+                                text: root.t-lock-hint;
+                                font-size: 11px;
+                                color: #52647b;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    if root.tab-index == 1 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            CheckBox {
+                                text: root.t-accent-check;
+                                checked <=> root.accent-enabled;
+                                toggled => { root.settings-changed(); }
+                            }
+                            AccentEditor {
+                                compact: root.compact;
+                                label: root.t-light-label;
+                                value <=> root.light-accent;
+                                edited => { root.settings-changed(); }
+                            }
+                            AccentEditor {
+                                compact: root.compact;
+                                label: root.t-dark-label;
+                                value <=> root.dark-accent;
+                                edited => { root.settings-changed(); }
+                            }
+                            Text {
+                                text: root.t-accent-hint;
+                                font-size: 11px;
+                                color: #52647b;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    if root.tab-index == 2 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 8px;
+                            CheckBox {
+                                text: root.t-autostart;
+                                checked <=> root.autostart;
+                                toggled => { root.autostart-changed(); }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.t-language;
+                                    font-size: 13px;
+                                    color: #334155;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                }
+                                ActionButton {
+                                    text: "EN";
+                                    primary: root.lang-index == 0;
+                                    clicked => {
+                                        root.lang-index = 0;
+                                        root.language-changed();
+                                    }
+                                }
+                                ActionButton {
+                                    text: "RU";
+                                    primary: root.lang-index == 1;
+                                    clicked => {
+                                        root.lang-index = 1;
+                                        root.language-changed();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.tab-index == 2 : Panel {
+                        VerticalBox {
+                            padding: 14px;
+                            spacing: 10px;
+                            SectionTitle { text: root.t-updates; }
+                            Text {
+                                text: root.update-info != "" ? root.update-info
+                                    : root.available-version != "" ? "v" + root.app-version + " → v" + root.available-version
+                                    : "v" + root.app-version;
+                                font-size: 11px;
+                                color: root.update-ok ? #15803d : #52647b;
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 8px;
+                                ActionButton {
+                                    text: root.checking-update ? root.t-checking : root.t-check-updates;
+                                    enabled: !root.checking-update;
+                                    clicked => { root.check-updates(); }
+                                }
+                                if !root.checking-update : ActionButton {
+                                    text: root.t-releases;
+                                    clicked => { root.open-releases(); }
+                                }
+                                if root.downloading-update : ActionButton {
+                                    text: root.t-cancel;
+                                    clicked => { root.cancel-update(); }
+                                }
+                            }
+                            HorizontalBox {
+                                padding: 0px;
+                                spacing: 8px;
+                                if !root.checking-update && root.available-version != "" : ActionButton {
+                                    text: root.t-install-update;
+                                    primary: true;
+                                    clicked => { root.install-update(); }
+                                }
+                                ActionButton {
+                                    text: root.t-logs;
+                                    clicked => { root.open-logs(); }
+                                }
+                            }
                         }
                     }
                 }
             }
-            }
-        }
         }
 
-        if root.status != "" : Text {
-            text: root.status;
-            font-size: 11px;
-            font-weight: 600;
-            color: #b91c1c;
-            wrap: word-wrap;
-        }
-        Button {
-            text: root.dirty ? root.t-apply + " •" : root.t-apply;
-            primary: true;
-            horizontal-stretch: 1;
-            clicked => { root.apply-settings(); }
+        Panel {
+            HorizontalBox {
+                padding: 8px;
+                spacing: 10px;
+                Text {
+                    text: root.status != "" ? root.status : root.dirty ? root.t-unsaved : "";
+                    font-size: 12px;
+                    color: #445773;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
+                ActionButton {
+                    text: root.t-apply;
+                    enabled: root.dirty;
+                    primary: true;
+                    min-width: 120px;
+                    clicked => { root.apply-settings(); }
+                }
+            }
         }
     }
 
@@ -851,7 +1077,7 @@ export component MainWindow inherits Window {
             height: parent.height;
         }
         VerticalBox {
-            padding: 48px;
+            padding: root.compact ? 16px : 32px;
             alignment: center;
             HorizontalBox {
                 padding: 0px;
@@ -885,13 +1111,13 @@ export component MainWindow inherits Window {
                         HorizontalBox {
                             padding: 0px;
                             spacing: 8px;
-                            Button {
+                            ActionButton {
                                 text: root.t-close-minimize;
                                 primary: true;
                                 horizontal-stretch: 1;
                                 clicked => { root.close-minimize(); }
                             }
-                            Button {
+                            ActionButton {
                                 text: root.t-close-quit;
                                 horizontal-stretch: 1;
                                 clicked => { root.close-quit(); }

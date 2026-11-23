@@ -106,43 +106,42 @@ pub fn apply(theme: Theme, apps: bool, system: bool) -> Result<()> {
 }
 
 pub fn notify_updated() {
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Mutex,
+    use std::{
+        sync::{mpsc, OnceLock},
+        time::Duration,
     };
-    use std::time::{Duration, Instant};
-    static LAST: Mutex<Option<Instant>> = Mutex::new(None);
-    static PENDING: AtomicBool = AtomicBool::new(false);
-    {
-        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-        let now = Instant::now();
-        if let Some(t) = *last {
-            if now.duration_since(t) < Duration::from_millis(500) {
-                if !PENDING.swap(true, Ordering::SeqCst) {
-                    std::thread::spawn(|| {
-                        std::thread::sleep(Duration::from_millis(500));
-                        PENDING.store(false, Ordering::SeqCst);
-                        {
-                            let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-                            *last = Some(Instant::now());
+    static NOTIFY: OnceLock<mpsc::SyncSender<()>> = OnceLock::new();
+
+    // Queue the pointer-free notification immediately, including for one-shot CLI calls.
+    post_theme_changed();
+    refresh_taskbars();
+
+    let notifier = NOTIFY.get_or_init(|| {
+        let (send, receive) = mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            while receive.recv().is_ok() {
+                loop {
+                    broadcast_color_change();
+                    match receive.recv_timeout(Duration::from_millis(200)) {
+                        // A new change supersedes the retry. Notify immediately.
+                        Ok(()) => continue,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            broadcast_color_change();
+                            post_theme_changed();
+                            break;
                         }
-                        broadcast_change();
-                        refresh_taskbars();
-                        std::thread::sleep(std::time::Duration::from_millis(200));
-                        broadcast_change();
-                    });
+                        Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                    }
                 }
-                return;
             }
-        }
-        *last = Some(now);
-    }
-    std::thread::spawn(|| {
-        broadcast_change();
-        refresh_taskbars();
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        broadcast_change();
+        });
+        send
     });
+    let _ = notifier.try_send(());
+}
+
+fn post_theme_changed() {
+    unsafe { PostMessageW(HWND_BROADCAST, WM_THEMECHANGED, 0, 0) };
 }
 
 pub fn set_wallpaper(path: &Path) -> Result<()> {
@@ -165,7 +164,7 @@ pub fn set_wallpaper(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn broadcast_change() {
+fn broadcast_color_change() {
     let param: Vec<u16> = "ImmersiveColorSet\0".encode_utf16().collect();
     unsafe {
         SendMessageTimeoutW(
@@ -173,15 +172,6 @@ fn broadcast_change() {
             WM_SETTINGCHANGE,
             0,
             param.as_ptr() as isize,
-            SMTO_ABORTIFHUNG,
-            1000,
-            std::ptr::null_mut(),
-        );
-        SendMessageTimeoutW(
-            HWND_BROADCAST,
-            WM_THEMECHANGED,
-            0,
-            0,
             SMTO_ABORTIFHUNG,
             1000,
             std::ptr::null_mut(),

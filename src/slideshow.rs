@@ -149,6 +149,17 @@ pub fn set_slideshow(dir: &Path, interval_min: u32, shuffle: bool) -> Result<()>
 /// image and re-setting the same folder keeps the position, so advancing
 /// is only meaningful when that folder's slideshow is already active —
 /// see [`plan_apply`].
+pub fn apply_explicit(path: &Path, interval_min: u32, shuffle: bool) -> Result<()> {
+    if !path.is_dir() {
+        return crate::theme::set_wallpaper(path);
+    }
+    if active_source_dir().is_some_and(|active| same_dir(&active, path)) {
+        advance()
+    } else {
+        set_slideshow(path, interval_min, shuffle)
+    }
+}
+
 pub fn advance() -> Result<()> {
     unsafe {
         use windows::core::PCWSTR;

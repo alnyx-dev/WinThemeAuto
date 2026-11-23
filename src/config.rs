@@ -39,6 +39,7 @@ pub struct Config {
     pub dark_accent: String,
     pub language: String,
     pub close_hint_acked: bool,
+    pub paused_until: Option<DateTime<Local>>,
     pub manual_hold: Option<Theme>,
     pub manual_hold_until: Option<DateTime<Local>>,
 }
@@ -70,6 +71,7 @@ impl Default for Config {
             dark_accent: "0078D4".to_string(),
             language: "en".to_string(),
             close_hint_acked: false,
+            paused_until: None,
             manual_hold: None,
             manual_hold_until: None,
         }
@@ -245,6 +247,10 @@ fn from_value_merged(v: &serde_json::Value) -> Config {
             cfg.manual_hold_until = Some(dt);
         }
     }
+    cfg.paused_until = v
+        .get("paused_until")
+        .and_then(|x| x.as_str())
+        .and_then(|s| s.parse().ok());
     sanitize(&mut cfg);
     cfg
 }
@@ -300,6 +306,18 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pause_deadline_round_trips_and_is_optional_in_old_configs() {
+        let cfg = Config {
+            auto_enabled: true,
+            paused_until: Some(Local::now() + chrono::Duration::hours(1)),
+            ..Config::default()
+        };
+        let value = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(from_value_merged(&value).paused_until, cfg.paused_until);
+        assert_eq!(from_value_merged(&serde_json::json!({})).paused_until, None);
+    }
 
     #[test]
     fn flex_time() {
